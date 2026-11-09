@@ -3,136 +3,92 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>Kyle | The Wayward Lantern</title>
-  <meta name="description" content="Kyle's personal site, set in a pixel-art fantasy tavern. Walk around the inn to learn about Kyle, his work, and his interests.">
-  <meta name="theme-color" content="#0b0d1f">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/style.css">
-  <script>document.documentElement.classList.add('js');</script>
+  <title>KyleGPT</title>
+  <meta name="description" content="Kyle's personal site. Ask something about Kyle, or skip straight to the plain résumé.">
+  <meta name="theme-color" content="#212121">
+  <script>
+    // Old links to the plain page (/?view=page) still work.
+    if (new URLSearchParams(location.search).get('view') === 'page') location.replace('tavern/?view=page' + location.hash);
+  </script>
+  <link rel="stylesheet" href="kylegpt/style.css">
 </head>
 <body>
-  <a class="skip-link" href="?view=page">Skip the game and read everything as a page</a>
+  <a class="skip-pill" href="tavern/?view=page">Skip to plain résumé</a>
 
-  <div id="game">
-    <div id="hud">
-      <button id="menu-btn" class="ff-btn" type="button" aria-haspopup="dialog">Menu</button>
-      <button id="sound-btn" class="ff-btn" type="button" aria-pressed="false" aria-label="Turn sound on">
-        <svg viewBox="0 0 16 16" width="20" height="20" aria-hidden="true" shape-rendering="crispEdges">
-          <path fill="currentColor" d="M2 6h3l4-3h1v10H9L5 10H2z"/>
-          <g class="sound-waves" fill="currentColor"><rect x="11" y="6" width="1" height="4"/><rect x="13" y="4" width="1" height="8"/></g>
-          <g class="sound-x" fill="currentColor"><rect x="11" y="5" width="1" height="1"/><rect x="12" y="6" width="1" height="1"/><rect x="13" y="7" width="1" height="2"/><rect x="12" y="9" width="1" height="1"/><rect x="11" y="10" width="1" height="1"/><rect x="14" y="6" width="1" height="1"/><rect x="15" y="5" width="1" height="1"/><rect x="14" y="9" width="1" height="1"/><rect x="15" y="10" width="1" height="1"/></g>
-        </svg>
-        <span class="sound-label">Sound off</span>
+  <div class="app" id="app">
+    <aside class="sidebar" aria-label="Site navigation">
+      <div class="side-head">
+        <span class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="22" height="22"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" d="M12 2.8l8 4.6v9.2l-8 4.6-8-4.6V7.4z"/><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M9.5 7.8v8.4M14.6 7.8l-5 4.6 5 3.8"/></svg>
+        </span>
+        <span class="brand-name">KyleGPT</span>
+      </div>
+
+      <button class="side-btn" type="button" id="new-chat">
+        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M12 5H6.5A2.5 2.5 0 0 0 4 7.5v10A2.5 2.5 0 0 0 6.5 20h10a2.5 2.5 0 0 0 2.5-2.5V12M17.6 3.9a1.9 1.9 0 0 1 2.7 2.7L12.9 14l-3.6.9.9-3.6z"/></svg>
+        New chat
       </button>
-    </div>
 
-    <div id="stage">
-      <canvas id="screen" width="320" height="240" role="img" aria-label="A pixel-art tavern at night, with rain on the windows. Use the Menu button to browse every section without playing."></canvas>
-      <div id="overlay-layer" aria-hidden="true"></div>
-      <div id="prompt" aria-hidden="true"></div>
-      <div id="title-card" aria-hidden="true">
-        <div class="title-name">The Wayward Lantern</div>
-        <div class="title-sub">An inn of stories, kept by Kyle</div>
+      <nav class="side-group" aria-labelledby="side-plain">
+        <h2 id="side-plain">Read it the normal way</h2>
+        <a href="tavern/?view=page#about">About Kyle</a>
+        <a href="tavern/?view=page#work">Work experience</a>
+        <a href="tavern/?view=page#interests">Interests</a>
+        <a href="tavern/?view=page#other">Other</a>
+      </nav>
+
+      <nav class="side-group" aria-labelledby="side-older">
+        <h2 id="side-older">Earlier versions</h2>
+        <a href="tavern/">The pixel tavern</a>
+        <a href="3d/">The 3D tavern</a>
+      </nav>
+
+      <div class="side-user">
+        <span class="avatar" aria-hidden="true">G</span>
+        <span>Guest</span>
       </div>
-      <div id="dialog" class="ff-window" hidden>
-        <div id="dialog-name"></div>
-        <p id="dialog-text"></p>
-        <span id="dialog-next" aria-hidden="true">&#9660;</span>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <span class="model">KyleGPT
+          <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M6 9l6 6 6-6"/></svg>
+        </span>
+      </header>
+
+      <div class="center">
+        <h1 class="greet">What do you want to know about Kyle?</h1>
+
+        <form class="composer-wrap" id="composer-wrap" autocomplete="off">
+          <label class="sr-only" for="prompt">Ask something about Kyle</label>
+          <div class="composer">
+            <textarea id="prompt" rows="1" placeholder="Ask something about Kyle" spellcheck="false"></textarea>
+            <button class="send" id="send" type="submit" aria-label="Send" disabled>
+              <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" d="M12 19V5M6 11l6-6 6 6"/></svg>
+            </button>
+          </div>
+        </form>
+
+        <div class="chips" id="chips">
+          <button type="button" class="chip">What does Kyle do?</button>
+          <button type="button" class="chip">Where has Kyle worked?</button>
+          <button type="button" class="chip">What is Kyle into?</button>
+        </div>
       </div>
-    </div>
 
-    <p id="sr-live" class="sr-only" aria-live="polite"></p>
-    <p id="hint"><span class="hint-keys">Move with arrow keys or WASD. Press Space to talk or look.</span><span class="hint-touch">Tap a spot to walk there. Tap a person or object to talk or look.</span></p>
+      <p class="disclaimer">KyleGPT can make mistakes. Check important info with Kyle.</p>
+    </main>
   </div>
 
-  <div id="menu" class="ff-window modal" role="dialog" aria-modal="true" aria-labelledby="menu-title" hidden>
-    <h2 id="menu-title">Menu</h2>
-    <ul class="menu-list">
-      <li><button type="button" data-section="about">About me</button></li>
-      <li><button type="button" data-section="work">Work experience</button></li>
-      <li><button type="button" data-section="interests">Interests</button></li>
-      <li><button type="button" data-section="other">Other</button></li>
-    </ul>
-    <p class="menu-foot"><a href="?view=page">Read everything as one page</a></p>
-    <button type="button" class="close-btn" data-close>Back to the inn</button>
-  </div>
+  <canvas id="glass-hole" class="fx" aria-hidden="true"></canvas>
+  <canvas id="glass-crack" class="fx" aria-hidden="true"></canvas>
 
-  <div id="panel" class="ff-window modal" role="dialog" aria-modal="true" aria-labelledby="panel-title" hidden>
-    <h2 id="panel-title" tabindex="-1"></h2>
-    <div id="panel-body"></div>
-    <button type="button" class="close-btn" data-close>Back to the inn</button>
-  </div>
+  <button type="button" class="reset-btn" id="reset" hidden>Put the glass back</button>
 
-  <!--
-    All site content lives here. The game reads each <section> by its
-    data-section name, and this same markup is the plain-page and no-JavaScript
-    version of the site. Edit text here; nothing else needs to change.
-  -->
-  <main id="content">
-    <header class="page-header">
-      <h1>Kyle</h1>
-      <p class="tagline">[One-line tagline: what you do, in plain words.]</p>
-      <p class="back-to-inn"><a href="./">Enter the inn (the playable version)</a></p>
-    </header>
+  <noscript><p class="noscript">KyleGPT needs JavaScript. <a href="tavern/?view=page">Read the plain résumé</a> instead.</p></noscript>
 
-    <section data-section="about" id="about">
-      <h2>About me</h2>
-      <p>[A short intro, three or four sentences: who you are, what you do, and what you care about.]</p>
-      <ul>
-        <li><strong>Based in:</strong> [City, State]</li>
-        <li><strong>Currently:</strong> [Role] at [Company]</li>
-        <li><strong>Reach me:</strong> [Email or LinkedIn link]</li>
-      </ul>
-    </section>
-
-    <section data-section="work" id="work">
-      <h2>Work experience</h2>
-      <article class="job">
-        <h3>[Job title], [Company]</h3>
-        <p class="dates">[mm/yy] to present</p>
-        <ul>
-          <li>[What you owned, and the result, with a number if you have one.]</li>
-          <li>[A second accomplishment.]</li>
-        </ul>
-      </article>
-      <article class="job">
-        <h3>[Job title], [Company]</h3>
-        <p class="dates">[mm/yy] to [mm/yy]</p>
-        <ul>
-          <li>[What you owned, and the result.]</li>
-          <li>[A second accomplishment.]</li>
-        </ul>
-      </article>
-      <article class="job">
-        <h3>[Job title], [Company]</h3>
-        <p class="dates">[mm/yy] to [mm/yy]</p>
-        <ul>
-          <li>[What you owned, and the result.]</li>
-        </ul>
-      </article>
-    </section>
-
-    <section data-section="interests" id="interests">
-      <h2>Interests</h2>
-      <ul>
-        <li><strong>[Interest one]:</strong> [Why you love it, in a sentence.]</li>
-        <li><strong>[Interest two]:</strong> [Why you love it, in a sentence.]</li>
-        <li><strong>[Interest three]:</strong> [Why you love it, in a sentence.]</li>
-      </ul>
-    </section>
-
-    <section data-section="other" id="other">
-      <h2>Other</h2>
-      <p>[Projects, writing, talks, side quests, or anything that doesn't fit elsewhere.]</p>
-    </section>
-  </main>
-
-  <script src="js/sprites.js"></script>
-  <script src="js/audio.js"></script>
-  <script src="js/world.js"></script>
-  <script src="js/npcs.js"></script>
-  <script src="js/main.js"></script>
+  <script src="kylegpt/matrix.js"></script>
+  <script src="kylegpt/glass.js"></script>
+  <script src="kylegpt/main.js"></script>
 </body>
 </html>
