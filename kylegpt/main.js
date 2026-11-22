@@ -1,28 +1,41 @@
 /*
- * KyleGPT: a chat page that cracks after 10 typed characters, then breaks
- * open on its own until the Matrix rain fills the screen.
+ * KyleGPT: a chat page whose glass cracks after 5 typed characters and
+ * shatters after 10, until the Matrix rain fills the screen.
  *
- * Tuning lives in CONFIG. Add ?progress=0.5 (0 to 1) to the URL to jump
- * straight to a point in the break, which helps when iterating on the look.
+ * Tuning lives in CONFIG. URL options for iterating on the look:
+ *   ?progress=0      the long crack, fully formed
+ *   ?progress=0.4    jump that far (0 to 1) into the shatter
+ *   ?seed=123        the same fracture every time
  */
 (function () {
   'use strict';
 
   const CONFIG = {
-    crackAt: 10,        // characters typed before the first crack
-    holdMs: 1100,       // the small crack sits still this long
-    breakMs: 2600,      // time from the first crack until the glass gives way
-    fullMs: 9000,       // time from the first crack until the screen is gone
-    typeBoost: 0.006    // extra typing nudges the break along a little
+    crackAt: 5,        // characters typed before the long crack
+    shatterAt: 10,     // characters typed before the glass shatters
+    minGapMs: 700,     // the long crack is always on screen at least this long first
+    typeBoostMs: 50    // each character typed during the shatter hurries it along
   };
 
   const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const params = new URLSearchParams(location.search);
   const $ = function (id) { return document.getElementById(id); };
   const app = $('app');
   const input = $('prompt');
   const send = $('send');
   const form = $('composer-wrap');
   const resetBtn = $('reset');
+  const sidebar = document.querySelector('.sidebar');
+
+  // Falling shards are painted in the color of the page they came from.
+  function rgb(v) {
+    const m = v.trim().match(/^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i);
+    return m ? [parseInt(m[1], 16), parseInt(m[2], 16), parseInt(m[3], 16)] : [33, 33, 33];
+  }
+  const css = getComputedStyle(document.documentElement);
+  const bgColor = rgb(css.getPropertyValue('--bg'));
+  const sideColor = rgb(css.getPropertyValue('--side'));
+  let sideRight = 0;
 
   const matrix = new Matrix(reduced);
   const glass = new Glass({
@@ -30,7 +43,10 @@
     hole: $('glass-hole'),
     matrix: matrix,
     reduced: reduced,
-    onBreak: function () { jolt(); },
+    seed: parseInt(params.get('seed'), 10) || 0,
+    colorAt: function (x) { return x < sideRight ? sideColor : bgColor; },
+    onCrack: function () { jolt('small'); },
+    onShatter: function () { jolt(); },
     onShattered: function () {
       document.body.classList.add('shattered');
       input.blur();
@@ -40,44 +56,39 @@
 
   let typed = 0;          // characters typed in total; deleting does not undo damage
   let lastLen = 0;
-  let crackedAt = 0;      // time of the first crack, 0 until then
-  let extra = 0;          // characters typed after the crack
-  let startProgress = 0;  // for ?progress=
+  let crackedAt = 0;
+  let shatterTimer = 0;
 
   function size() {
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     glass.resize(window.innerWidth, window.innerHeight, dpr);
-    // Impact point: horizontally centered on the chat column, just above the input box.
+    sideRight = sidebar && sidebar.offsetParent ? sidebar.getBoundingClientRect().right : 0;
+    // The impact lands just above the input box, around the middle of it.
     const r = form.getBoundingClientRect();
-    glass.setCenter(r.left + r.width / 2, r.top - 30);
+    glass.setFocus(r.left + r.width / 2, r.top - 30);
   }
 
-  function jolt() {
+  function jolt(kind) {
     if (reduced) return;
-    app.classList.remove('jolt');
+    app.classList.remove('jolt', 'jolt-small');
     void app.offsetWidth;
-    app.classList.add('jolt');
+    app.classList.add(kind === 'small' ? 'jolt-small' : 'jolt');
   }
 
   function crack(now) {
     if (crackedAt) return;
     crackedAt = now;
-    jolt();
+    glass.crack(now);
   }
 
-  // Progress follows the clock once the crack appears: a short pause, then
-  // the break, then the hole widens until nothing is left.
-  function progressAt(now) {
-    const t = now - crackedAt;
-    let p;
-    if (t < CONFIG.holdMs) p = 0.05 * t / CONFIG.holdMs;
-    else if (t < CONFIG.breakMs) p = 0.05 + (t - CONFIG.holdMs) / (CONFIG.breakMs - CONFIG.holdMs) * (Glass.BREAK_AT - 0.05);
-    else p = Glass.BREAK_AT + (t - CONFIG.breakMs) / (CONFIG.fullMs - CONFIG.breakMs) * (1 - Glass.BREAK_AT);
-    return Math.min(1, Math.max(p, startProgress) + extra * CONFIG.typeBoost);
+  function shatter(now) {
+    crack(now);
+    if (shatterTimer) return;
+    const wait = Math.max(0, crackedAt + CONFIG.minGapMs - now);
+    shatterTimer = setTimeout(function () { glass.shatter(performance.now()); }, wait);
   }
 
   function loop(now) {
-    if (crackedAt) glass.setProgress(progressAt(now), now);
     glass.frame(now);
     requestAnimationFrame(loop);
   }
@@ -87,8 +98,9 @@
     const added = Math.max(0, len - lastLen);
     lastLen = len;
     typed += added;
-    if (crackedAt) extra += added;
-    if (typed >= CONFIG.crackAt) crack(performance.now());
+    if (shatterTimer) glass.boost(added * CONFIG.typeBoostMs);
+    if (typed >= CONFIG.shatterAt) shatter(performance.now());
+    else if (typed >= CONFIG.crackAt) crack(performance.now());
     send.disabled = !input.value.trim();
     input.style.height = 'auto';
     input.style.height = Math.min(input.scrollHeight, 200) + 'px';
@@ -103,11 +115,11 @@
     }
   });
 
-  // There is no answer yet: sending just makes sure the glass cracks.
+  // There is no answer yet: sending a question breaks the glass.
   form.addEventListener('submit', function (e) {
     e.preventDefault();
     if (!input.value.trim()) return;
-    crack(performance.now());
+    shatter(performance.now());
   });
 
   // Suggestion chips type themselves into the box, one character at a time.
@@ -137,8 +149,16 @@
   window.addEventListener('resize', size);
   size();
 
-  const q = parseFloat(new URLSearchParams(location.search).get('progress'));
-  if (q >= 0) { startProgress = Math.min(q, 1); crack(performance.now()); }
+  const q = parseFloat(params.get('progress'));
+  if (q >= 0) {
+    const now = performance.now();
+    crackedAt = now - 5000;
+    glass.crack(crackedAt);
+    if (q > 0) { shatterTimer = -1; glass.shatter(now - Math.min(q, 1) * Glass.TOTAL_MS); }
+  } else {
+    // Work out the fracture while the visitor reads, so the first crack is instant.
+    (window.requestIdleCallback || function (f) { return setTimeout(f, 300); })(function () { glass.prepare(); });
+  }
 
   requestAnimationFrame(loop);
   input.focus({ preventScroll: true });

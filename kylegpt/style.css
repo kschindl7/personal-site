@@ -148,12 +148,18 @@ a { color: inherit; }
 
 .noscript { position: fixed; z-index: 6; left: 16px; right: 16px; bottom: 16px; margin: 0; text-align: center; }
 
-/* A short jolt when the glass cracks and when it gives way. */
-.app.jolt { animation: jolt 0.22s linear; }
+/* A small knock when the long crack appears, a harder one when the glass shatters. */
+.app.jolt-small { animation: jolt-small 0.16s linear; }
+@keyframes jolt-small {
+  30% { transform: translate(1px, -1px); }
+  65% { transform: translate(-1px, 1px); }
+}
+.app.jolt { animation: jolt 0.26s linear; }
 @keyframes jolt {
-  20% { transform: translate(-3px, 2px); }
-  45% { transform: translate(3px, -2px); }
-  70% { transform: translate(-2px, -1px); }
+  15% { transform: translate(-4px, 3px); }
+  35% { transform: translate(3px, -2px); }
+  60% { transform: translate(-2px, 1px); }
+  80% { transform: translate(1px, -1px); }
 }
 
 /* When the screen is gone, the composer drops away too. */
@@ -167,7 +173,7 @@ body.shattered .app { visibility: hidden; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .app.jolt { animation: none; }
+  .app.jolt, .app.jolt-small { animation: none; }
   .composer-wrap { transition: opacity 0.4s linear; }
   body.shattered .composer-wrap { transform: none; }
 }

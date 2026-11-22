@@ -1,6 +1,6 @@
 # KyleGPT
 
-Kyle's personal site. It opens on a chat page that looks like an AI assistant, titled KyleGPT. After a visitor types 10 characters, a small crack appears just above the input box. A moment later the glass gives way and the hole spreads on its own, unevenly, showing green Matrix-style rain underneath until it fills the screen. What happens after that is still open.
+Kyle's personal site. It opens on a chat page that looks like an AI assistant, titled KyleGPT. After a visitor types 5 characters, one long crack runs across the glass from near the bottom-left corner to near the top-right. At 10 characters the glass is hit just above the input box: radial cracks burst out, fork and stop where they meet other cracks, concentric cracks join them at staggered points, and later fractures start from the existing cracks. Shards of every shape and size fall away, showing green Matrix-style rain underneath until it fills the screen. What happens after that is still open.
 
 There is no build step. Everything is plain HTML, CSS, and JavaScript, and all of the effects are drawn in code.
 
@@ -12,12 +12,12 @@ There is no build step. Everything is plain HTML, CSS, and JavaScript, and all o
 
 ## KyleGPT files
 
-- `kylegpt/main.js`: the chat page, the 10-character trigger, and the timeline. Timing knobs are in `CONFIG` at the top.
-- `kylegpt/glass.js`: crack network, the hole and how it spreads, and falling shards.
+- `kylegpt/main.js`: the chat page, the 5- and 10-character triggers, and the timing knobs in `CONFIG` at the top.
+- `kylegpt/glass.js`: builds the fracture (the long crack, the impact, the cascade), works out the shards from the regions the cracks enclose, and draws the cracks, the hole and the falling shards.
 - `kylegpt/matrix.js`: the green rain.
 - `kylegpt/style.css`: the chat layout.
 
-Add `?progress=0.5` (any value from 0 to 1) to jump straight to a point in the break. Visitors who prefer reduced motion get a still frame of the rain, no shards, and no screen jolt. The "Skip to plain résumé" link stays on screen the whole time, and old `/?view=page` links redirect to the plain page.
+URL options for working on the effect: `?progress=0` shows the long crack fully formed, `?progress=0.4` (any value up to 1) jumps that far into the shatter, and `?seed=123` gives the same fracture every time. Visitors who prefer reduced motion get the cracks without the spreading, no falling shards, a still frame of the rain, and no screen jolt. The "Skip to plain résumé" link stays on screen the whole time, and old `/?view=page` links redirect to the plain page.
 
 ---
 

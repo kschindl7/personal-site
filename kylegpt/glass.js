@@ -1,20 +1,33 @@
 /*
- * The cracked screen. Builds a spider-web crack (radial lines plus rings),
- * splits it into cells, and drops cells out as the damage grows so the hole
- * spreads unevenly. Draws three things:
- *   - crack lines on #glass-crack (above the UI),
- *   - the Matrix rain through the hole on #glass-hole,
- *   - falling shards, also on #glass-hole.
+ * The breaking screen.
  *
- * Everything is driven by setProgress(p), p from 0 (fresh crack) to 1
- * (screen gone). main.js decides how p moves over time.
+ * Two stages, driven from main.js:
+ *   crack(now)   One long stress crack runs across the glass from near the
+ *                bottom-left corner to near the top-right, with a few forks.
+ *   shatter(now) An impact just above the input box sends radial cracks out
+ *                that fork, wander and stop where they meet other cracks.
+ *                Concentric cracks join neighboring radials at staggered
+ *                points. More fractures start later from points on existing
+ *                cracks, so the damage cascades across the screen.
+ *
+ * Shards are whatever regions the cracks enclose. The crack paths are drawn
+ * into a grid and the enclosed regions are flood-filled, so every shard has
+ * its own shape, nothing is mirrored, and pieces can be any size. A shard
+ * can fall once every crack around it has formed, and only after a neighbor
+ * has fallen, so the hole grows outward from the impact (and from a couple
+ * of later fracture points) until no glass is left.
+ *
+ * Canvases: #glass-crack (above the UI) holds the crack lines and the bright
+ * broken edges. #glass-hole (below the composer) shows the Matrix rain
+ * through the hole and the falling shards.
  */
 (function () {
   'use strict';
 
   const TAU = Math.PI * 2;
-  const BREAK_AT = 0.22; // progress where the glass first gives way
-  const STAGGER_MS = 30; // delay between neighboring cells falling
+  const TOTAL_MS = 7000;   // roughly how long the shatter takes, start to finish
+  const GRAVITY = 2400;    // px/s² for falling shards
+  const MAX_SPRITES = 240; // falling shards drawn at once
 
   function rng(seed) {
     let a = seed >>> 0;
@@ -25,107 +38,572 @@
       return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
     };
   }
-
-  function lerp(p, q, t) { return { x: p.x + (q.x - p.x) * t, y: p.y + (q.y - p.y) * t }; }
+  function dist(a, b) { return Math.hypot(a.x - b.x, a.y - b.y); }
   function wrap(a) { return ((a % TAU) + TAU) % TAU; }
 
-  // Builds the crack network in coordinates relative to the impact point.
-  function build(seed, maxR) {
-    const rnd = rng(seed);
-    const rings = [];
-    for (let r = 12; ; r = r * 1.38 + 14) { rings.push(r); if (r > maxR) break; }
+  // ---------------------------------------------------------------------------
+  // Crack network
+  // ---------------------------------------------------------------------------
 
-    const lines = [];
-    const cells = [];
-    const native = function (rad, j) {
-      const a = rad.a + (rnd() - 0.5) * 0.07;
-      const r = rings[j] * (1 + (rnd() - 0.5) * 0.1);
-      return { x: Math.cos(a) * r, y: Math.sin(a) * r };
-    };
+  // Occupancy grid used while growing cracks, so a new crack knows when it
+  // runs into an old one. Covers a margin around the screen.
+  const OCC = 3, PAD = 60;
 
-    // First radial cracks out of the impact point.
-    let level = [];
-    const n0 = 9;
-    for (let i = 0; i < n0; i++) level.push({ a: (i + (rnd() - 0.5) * 0.55) / n0 * TAU, pts: [], mid: [] });
-    level.sort(function (p, q) { return p.a - q.a; });
-    level.forEach(function (rad) { rad.pts[0] = native(rad, 0); });
-
-    const O = { x: 0, y: 0 };
-    for (let i = 0; i < level.length; i++) {
-      const a = level[i], b = level[(i + 1) % level.length];
-      let span = b.a - a.a; if (span <= 0) span += TAU;
-      cells.push({ band: -1, poly: [O, a.pts[0], b.pts[0]], a0: a.a, span: span });
-      lines.push({ kind: 'radial', pts: [O, a.pts[0]], r0: 0, r1: rings[0] });
-    }
-
-    const lobes = [];
-    for (let k = 0; k < 3; k++) lobes.push({ dir: rnd() * TAU, w: 1.4 + rnd() * 1.8 });
-
-    for (let j = 0; j < rings.length - 1; j++) {
-      const keep = j < 2 ? 0.97 : j < 4 ? 0.7 : 0.45;
-      const next = [];
-      for (let i = 0; i < level.length; i++) {
-        const a = level[i], b = level[(i + 1) % level.length];
-        let span = b.a - a.a; if (span <= 0) span += TAU;
-        lines.push({ kind: 'ring', pts: [a.pts[j], b.pts[j]], r: rings[j], keep: rnd() < keep });
-        next.push(a);
-        // Long stretches branch into a new radial crack.
-        if (span * rings[j + 1] > 150 && span > 0.12) {
-          const t = 0.35 + rnd() * 0.3;
-          const rad = { a: a.a + span * t, pts: [], mid: [] };
-          rad.pts[j] = lerp(a.pts[j], b.pts[j], t);
-          next.push(rad);
-        }
-      }
-      next.forEach(function (rad) {
-        const p0 = rad.pts[j], p1 = rad.pts[j + 1] = native(rad, j + 1);
-        const dx = p1.x - p0.x, dy = p1.y - p0.y;
-        const k = (rnd() - 0.5) * 0.18;
-        const m = { x: (p0.x + p1.x) / 2 - dy * k, y: (p0.y + p1.y) / 2 + dx * k };
-        rad.mid[j] = m;
-        lines.push({ kind: 'radial', pts: [p0, m, p1], r0: rings[j], r1: rings[j + 1] });
-      });
-      for (let i = 0; i < next.length; i++) {
-        const a = next[i], b = next[(i + 1) % next.length];
-        let span = b.a - a.a; if (span <= 0) span += TAU;
-        cells.push({ band: j, poly: [a.pts[j], b.pts[j], b.mid[j], b.pts[j + 1], a.pts[j + 1], a.mid[j]], a0: a.a, span: span });
-      }
-      level = next;
-    }
-
-    // Neighbors, scores (lower falls sooner), and bounds.
-    const byBand = {};
-    cells.forEach(function (c, i) {
-      c.id = i; c.nb = []; c.fallen = false; c.due = 0;
-      (byBand[c.band] = byBand[c.band] || []).push(c);
-      const mid = c.a0 + c.span / 2;
-      let lobe = 0;
-      lobes.forEach(function (l) { lobe += l.w * Math.pow(Math.max(0, Math.cos(mid - l.dir)), 6); });
-      c.score = c.band + 1 + rnd() * 1.4 - lobe;
-      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity, sx = 0, sy = 0;
-      c.poly.forEach(function (p) {
-        minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x);
-        minY = Math.min(minY, p.y); maxY = Math.max(maxY, p.y);
-        sx += p.x; sy += p.y;
-      });
-      c.box = [minX, minY, maxX, maxY];
-      c.cx = sx / c.poly.length; c.cy = sy / c.poly.length;
-    });
-    Object.keys(byBand).forEach(function (k) {
-      const band = byBand[k], inner = byBand[+k - 1];
-      band.forEach(function (c, i) {
-        const side = band[(i + 1) % band.length];
-        c.nb.push(side); side.nb.push(c);
-        if (!inner) return;
-        const mid = c.a0 + c.span / 2;
-        for (let q = 0; q < inner.length; q++) {
-          if (wrap(mid - inner[q].a0) <= inner[q].span) { c.nb.push(inner[q]); inner[q].nb.push(c); break; }
-        }
-      });
-    });
-
-    return { rings: rings, lines: lines, cells: cells };
+  function Builder(w, h, seed) {
+    this.w = w; this.h = h;
+    this.r = rng(seed);
+    this.cracks = [];
+    this.origins = [];
+    this.ow = Math.ceil((w + PAD * 2) / OCC);
+    this.oh = Math.ceil((h + PAD * 2) / OCC);
+    this.occ = new Int32Array(this.ow * this.oh);
   }
+
+  Builder.prototype.U = function (a, b) { return a + (b - a) * this.r(); };
+  Builder.prototype.gauss = function () { const r = this.r; return (r() + r() + r() - 1.5) * 2; };
+
+  Builder.prototype.cell = function (x, y) {
+    const gx = Math.floor((x + PAD) / OCC), gy = Math.floor((y + PAD) / OCC);
+    if (gx < 0 || gy < 0 || gx >= this.ow || gy >= this.oh) return -1;
+    return gy * this.ow + gx;
+  };
+
+  Builder.prototype.mark = function (x0, y0, x1, y1, id) {
+    const n = Math.max(1, Math.ceil(Math.hypot(x1 - x0, y1 - y0) / 1.5));
+    for (let k = 0; k <= n; k++) {
+      const x = x0 + (x1 - x0) * k / n, y = y0 + (y1 - y0) * k / n;
+      // 2x2 so a crossing crack can't slip through diagonally.
+      for (let d = 0; d < 4; d++) {
+        const i = this.cell(x + (d & 1) * OCC, y + (d >> 1) * OCC);
+        if (i >= 0 && !this.occ[i]) this.occ[i] = id + 1;
+      }
+    }
+  };
+
+  // First other crack on the segment, or -1.
+  Builder.prototype.hit = function (x0, y0, x1, y1, id, ignore, skip) {
+    const n = Math.max(1, Math.ceil(Math.hypot(x1 - x0, y1 - y0) / 1.5));
+    for (let k = 1; k <= n; k++) {
+      const i = this.cell(x0 + (x1 - x0) * k / n, y0 + (y1 - y0) * k / n);
+      if (i < 0) continue;
+      const v = this.occ[i] - 1;
+      if (v >= 0 && v !== id && v !== skip && !(ignore && ignore.has(v))) return v;
+    }
+    return -1;
+  };
+
+  // The point on crack `id` closest to (x, y), so joins are exact.
+  Builder.prototype.nearest = function (id, x, y) {
+    const c = this.cracks[id];
+    let best = 0, bd = Infinity;
+    for (let i = 0; i < c.pts.length; i++) {
+      const d = (c.pts[i].x - x) * (c.pts[i].x - x) + (c.pts[i].y - y) * (c.pts[i].y - y);
+      if (d < bd) { bd = d; best = i; }
+    }
+    return { x: c.pts[best].x, y: c.pts[best].y, t: c.t[best] };
+  };
+
+  Builder.prototype.add = function (c) {
+    c.id = this.cracks.length;
+    this.cracks.push(c);
+    return c;
+  };
+
+  Builder.prototype.outside = function (x, y, m) {
+    return x < -m || y < -m || x > this.w + m || y > this.h + m;
+  };
+
+  // A crack that wanders forward from a point, forks now and then, and stops
+  // when it meets another crack (most of the time) or leaves the screen.
+  Builder.prototype.grow = function (opt) {
+    const ids = [];
+    const queue = [opt];
+    while (queue.length && this.cracks.length < 900) {
+      const o = queue.shift();
+      const c = this.add({ phase: o.phase, kind: o.kind, w: o.w, alpha: o.alpha, pts: [{ x: o.x, y: o.y }], t: [o.t0], dangling: false });
+      ids.push(c.id);
+      if (o.family) o.family.add(c.id);
+      const time = function (s) { return o.t0 + s / o.speed * (1 + s / 5000); };
+      let x = o.x, y = o.y, a = o.a, base = o.a, s = 0;
+      let nextFork = o.forkEvery ? o.forkEvery * this.U(0.45, 1.2) : Infinity;
+      let skip = -1, skipUntil = 0;
+      for (let guard = 0; guard < 2000; guard++) {
+        const step = this.U(4.5, 7.5);
+        a += this.gauss() * 0.05 + (base - a) * 0.1;
+        base += this.gauss() * 0.012;
+        const nx = x + Math.cos(a) * step, ny = y + Math.sin(a) * step;
+        const h = this.hit(x, y, nx, ny, c.id, s < o.ignoreUntil ? o.ignore : null, s < skipUntil ? skip : -1);
+        if (h >= 0) {
+          if (this.r() < o.stopProb) {
+            const q = this.nearest(h, nx, ny);
+            s += Math.hypot(q.x - x, q.y - y);
+            c.pts.push({ x: q.x, y: q.y }); c.t.push(time(s));
+            this.mark(x, y, q.x, q.y, c.id);
+            break;
+          }
+          skip = h; skipUntil = s + 16; // breaks straight through this one
+        }
+        this.mark(x, y, nx, ny, c.id);
+        s += step; x = nx; y = ny;
+        c.pts.push({ x: x, y: y }); c.t.push(time(s));
+        if (this.outside(x, y, 30)) break;
+        if (s >= o.maxLen) { c.dangling = true; break; }
+        if (s >= nextFork && o.depth < 3) {
+          // Bifurcation: both halves bend away from each other a little.
+          const sg = this.r() < 0.5 ? -1 : 1, spread = this.U(0.2, 0.5);
+          queue.push(Object.assign({}, o, {
+            x: x, y: y, a: a + sg * spread, t0: time(s), depth: o.depth + 1,
+            ignore: new Set([c.id]), ignoreUntil: 24,
+            maxLen: this.r() < 0.22 ? this.U(40, 260) : o.maxLen === Infinity ? Infinity : o.maxLen * this.U(0.3, 0.8)
+          }));
+          a -= sg * spread * this.U(0.2, 0.6); base = a;
+          nextFork = s + o.forkEvery * this.U(0.6, 1.7);
+        }
+      }
+    }
+    return ids;
+  };
+
+  // The first crack: one long, uneven line from near the bottom-left corner to
+  // near the top-right, spreading both ways from a point near the middle.
+  Builder.prototype.mainCrack = function () {
+    const w = this.w, h = this.h, r = this.r;
+    const A = r() < 0.5 ? { x: this.U(-10, w * 0.1), y: h + 14 } : { x: -14, y: this.U(h * 0.85, h) };
+    const B = r() < 0.5 ? { x: this.U(w * 0.9, w + 10), y: -14 } : { x: w + 14, y: this.U(0, h * 0.15) };
+    const L = dist(A, B), dx = (B.x - A.x) / L, dy = (B.y - A.y) / L;
+    const nx = -dy, ny = dx;
+    const waves = [
+      { amp: this.U(0.02, 0.05) * L * (r() < 0.5 ? -1 : 1), f: this.U(0.6, 1.3), ph: this.U(0, TAU) },
+      { amp: this.U(0.007, 0.018) * L, f: this.U(2, 3.6), ph: this.U(0, TAU) },
+      { amp: this.U(0.002, 0.005) * L, f: this.U(5, 9), ph: this.U(0, TAU) }
+    ];
+    const kinks = [];
+    for (let k = 0, n = 3 + Math.floor(r() * 4); k < n; k++) kinks.push({ u: this.U(0.05, 0.95), amt: this.U(3, 10) * (r() < 0.5 ? -1 : 1) });
+    const N = Math.ceil(L / 5);
+    const pts = [];
+    let jit = 0;
+    for (let i = 0; i <= N; i++) {
+      const u = i / N;
+      let off = 0;
+      waves.forEach(function (q) { off += q.amp * Math.sin(TAU * q.f * u + q.ph); });
+      off *= Math.pow(Math.sin(Math.PI * u), 0.5);
+      kinks.forEach(function (k) { off += k.amt / (1 + Math.exp(-(u - k.u) * 900)); });
+      jit = jit * 0.8 + this.gauss() * 0.35;
+      off += jit;
+      pts.push({ x: A.x + dx * L * u + nx * off, y: A.y + dy * L * u + ny * off });
+    }
+    const s = [0];
+    for (let i = 1; i < pts.length; i++) s.push(s[i - 1] + dist(pts[i - 1], pts[i]));
+    const i0 = Math.floor(pts.length * this.U(0.4, 0.6));
+    const t = s.map(function (v) { const d = Math.abs(v - s[i0]); return d / 3.2 * (1 + d / 3000); });
+    const main = this.add({ phase: 0, kind: 'main', w: 1.7, alpha: 0.92, pts: pts, t: t, dangling: false });
+    for (let i = 1; i < pts.length; i++) this.mark(pts[i - 1].x, pts[i - 1].y, pts[i].x, pts[i].y, main.id);
+
+    // Forks off the long crack: a few real branches and some short spurs.
+    const self = this;
+    function fork(len, w, alpha, spread) {
+      const i = Math.floor(self.U(0.08, 0.92) * (pts.length - 2)) + 1;
+      if (self.outside(pts[i].x, pts[i].y, -10)) return;
+      let a = Math.atan2(pts[i + 1].y - pts[i].y, pts[i + 1].x - pts[i].x);
+      if (i < i0) a += Math.PI; // branches run the way the crack was travelling
+      self.grow({
+        x: pts[i].x, y: pts[i].y, a: a + (r() < 0.5 ? -1 : 1) * spread,
+        phase: 0, t0: t[i] + self.U(0, 30), speed: 2.4, kind: 'branch', w: w, alpha: alpha,
+        depth: 3, maxLen: len, stopProb: 1, forkEvery: 0,
+        ignore: new Set([main.id]), ignoreUntil: 18
+      });
+    }
+    const nb = 3 + Math.floor(r() * 3);
+    for (let k = 0; k < nb; k++) fork(k === 0 ? this.U(260, 520) : this.U(40, 220), 1.15, 0.8, this.U(0.3, 0.75));
+    for (let k = 0, n = 6 + Math.floor(r() * 6); k < n; k++) fork(this.U(5, 18), 0.8, 0.55, this.U(0.5, 1.3));
+    return main;
+  };
+
+  // Radial cracks out of a point, with uneven gaps between them.
+  Builder.prototype.radials = function (O, t0, n, opt) {
+    const gaps = [];
+    let sum = 0;
+    for (let i = 0; i < n; i++) { const g = -Math.log(1 - this.r() * 0.97) + 0.25; gaps.push(g); sum += g; }
+    let a = this.U(0, TAU);
+    const family = new Set(opt.onCrack >= 0 ? [opt.onCrack] : []);
+    let ids = [];
+    for (let i = 0; i < n; i++) {
+      a += gaps[i] / sum * TAU;
+      ids = ids.concat(this.grow({
+        x: O.x, y: O.y, a: a, phase: 1, t0: t0 + this.U(0, 25), speed: this.U(opt.speed[0], opt.speed[1]),
+        kind: 'radial', w: opt.w, alpha: 0.86, depth: 0,
+        maxLen: this.r() < opt.dieP ? this.U(60, 380) : Infinity,
+        stopProb: opt.stop, forkEvery: this.U(opt.fork[0], opt.fork[1]),
+        family: family, ignore: family, ignoreUntil: 16
+      }));
+    }
+    return ids;
+  };
+
+  Builder.prototype.atRadius = function (id, O, rad) {
+    const c = this.cracks[id];
+    for (let i = 1; i < c.pts.length; i++) {
+      if (dist(c.pts[i], O) >= rad) return { x: c.pts[i].x, y: c.pts[i].y, t: c.t[i], id: id };
+    }
+    return null;
+  };
+
+  // Concentric cracks: short, slightly bowed joins between neighboring
+  // radials. Each join picks its own radius on each side, so they never line
+  // up into rings.
+  Builder.prototype.rings = function (O, ids, opt) {
+    const maxR = Math.hypot(this.w, this.h) * 1.1;
+    let rad = opt.r0;
+    while (rad < maxR) {
+      const cands = [];
+      for (let k = 0; k < ids.length; k++) {
+        const p = this.atRadius(ids[k], O, rad);
+        if (p) cands.push({ id: ids[k], ang: Math.atan2(p.y - O.y, p.x - O.x) });
+      }
+      cands.sort(function (p, q) { return p.ang - q.ang; });
+      const n = cands.length;
+      for (let i = 0; n > 1 && i < n; i++) {
+        const a = cands[i], b = cands[(i + 1) % n];
+        const gap = wrap(b.ang - a.ang);
+        if (gap < 0.05 || gap > 2.3) continue;
+        const p = (rad < 160 ? 0.97 : rad < 420 ? 0.86 : 0.66) * opt.density;
+        if (this.r() > p) continue;
+        const P = this.atRadius(a.id, O, rad * this.U(0.8, 1.2));
+        const Q = this.atRadius(b.id, O, rad * this.U(0.8, 1.2));
+        if (!P || !Q || dist(P, Q) > opt.maxChord || dist(P, Q) < 4) continue;
+        this.chord(P, Q, O);
+      }
+      rad = rad * this.U(opt.f[0], opt.f[1]) + this.U(6, 22);
+    }
+  };
+
+  Builder.prototype.chord = function (P, Q, O) {
+    if (Q.t < P.t) { const tmp = P; P = Q; Q = tmp; }
+    const t0 = Math.max(P.t, Q.t) + this.U(15, 110);
+    const L = dist(P, Q);
+    const n = Math.max(2, Math.round(L / 6));
+    let nx = -(Q.y - P.y) / L, ny = (Q.x - P.x) / L;
+    const mid = { x: (P.x + Q.x) / 2, y: (P.y + Q.y) / 2 };
+    if (dist({ x: mid.x + nx, y: mid.y + ny }, O) < dist(mid, O)) { nx = -nx; ny = -ny; }
+    const bow = L * this.U(0.02, 0.12) * (this.r() < 0.85 ? 1 : -1);
+    const pts = [{ x: P.x, y: P.y }];
+    let jit = 0;
+    for (let i = 1; i < n; i++) {
+      const u = i / n;
+      jit = jit * 0.75 + this.gauss() * 0.5;
+      const off = bow * Math.sin(Math.PI * u) + jit * Math.sin(Math.PI * u);
+      pts.push({ x: P.x + (Q.x - P.x) * u + nx * off, y: P.y + (Q.y - P.y) * u + ny * off });
+    }
+    pts.push({ x: Q.x, y: Q.y });
+
+    const c = this.add({ phase: 1, kind: 'chord', w: 1.0, alpha: 0.74, pts: [pts[0]], t: [t0], dangling: false });
+    const ignore = new Set([P.id, Q.id]);
+    const stopAt = this.r() < 0.1 ? Math.floor(pts.length * this.U(0.3, 0.7)) : pts.length;
+    let s = 0;
+    for (let i = 1; i < pts.length; i++) {
+      const a = pts[i - 1], b = pts[i];
+      const end = i >= pts.length - 2;
+      const h = end ? -1 : this.hit(a.x, a.y, b.x, b.y, c.id, ignore, -1);
+      if (h >= 0) {
+        const q = this.nearest(h, b.x, b.y);
+        s += dist(a, q);
+        c.pts.push({ x: q.x, y: q.y }); c.t.push(t0 + s / 1.4);
+        this.mark(a.x, a.y, q.x, q.y, c.id);
+        return;
+      }
+      s += dist(a, b);
+      c.pts.push(b); c.t.push(t0 + s / 1.4);
+      this.mark(a.x, a.y, b.x, b.y, c.id);
+      if (i >= stopAt) { c.dangling = true; return; }
+    }
+  };
+
+  // Crushed glass right at the impact: many tiny cracks.
+  Builder.prototype.splinters = function (O) {
+    for (let k = 0, n = 16 + Math.floor(this.r() * 12); k < n; k++) {
+      const a = this.U(0, TAU), r0 = this.U(0, 5), len = this.U(4, 24);
+      const p0 = { x: O.x + Math.cos(a) * r0, y: O.y + Math.sin(a) * r0 };
+      const b = a + this.gauss() * 0.3;
+      const pts = [p0, { x: p0.x + Math.cos(b) * len * 0.5, y: p0.y + Math.sin(b) * len * 0.5 }];
+      const b2 = b + this.gauss() * 0.25;
+      pts.push({ x: pts[1].x + Math.cos(b2) * len * 0.5, y: pts[1].y + Math.sin(b2) * len * 0.5 });
+      const t0 = this.U(0, 30);
+      this.add({ phase: 1, kind: 'splinter', w: 0.8, alpha: 0.55, pts: pts, t: [t0, t0 + len / 3, t0 + len / 1.5], dangling: true });
+    }
+  };
+
+  // A later fracture that starts from a point on a crack that is already there.
+  Builder.prototype.cascade = function (O, t0, onCrack) {
+    this.origins.push({ x: O.x, y: O.y, t: t0 });
+    const ids = this.radials(O, t0, 5 + Math.floor(this.r() * 3), {
+      onCrack: onCrack, speed: [1.8, 2.4], w: 1.2, dieP: 0.1, stop: 0.9, fork: [160, 320]
+    });
+    this.rings(O, ids, { r0: this.U(18, 34), f: [1.3, 1.6], density: 0.9, maxChord: 260 });
+  };
+
+  // Pick the candidate point farthest from the fractures that already exist.
+  Builder.prototype.farthest = function (cands) {
+    const self = this, inset = 0.06;
+    let best = null, bs = -1;
+    cands.forEach(function (p) {
+      if (p.x < self.w * inset || p.x > self.w * (1 - inset) || p.y < self.h * inset || p.y > self.h * (1 - inset)) return;
+      let m = Infinity;
+      self.origins.forEach(function (o) { m = Math.min(m, dist(o, p)); });
+      const sc = m * self.U(0.7, 1);
+      if (sc > bs) { bs = sc; best = p; }
+    });
+    return best;
+  };
+
+  Builder.prototype.samplePoints = function (n, filter) {
+    const out = [];
+    const pool = this.cracks.filter(filter);
+    for (let k = 0; k < n && pool.length; k++) {
+      const c = pool[Math.floor(this.r() * pool.length)];
+      const i = Math.floor(this.r() * c.pts.length);
+      out.push({ x: c.pts[i].x, y: c.pts[i].y, id: c.id });
+    }
+    return out;
+  };
+
+  // ---------------------------------------------------------------------------
+  // Shards: draw the cracks into a grid and flood-fill what they enclose.
+  // ---------------------------------------------------------------------------
+
+  function raster(B, cs) {
+    const GW = Math.ceil(B.w / cs), GH = Math.ceil(B.h / cs);
+    const T = new Float32Array(GW * GH).fill(Infinity);
+    B.cracks.forEach(function (c) {
+      for (let i = 1; i < c.pts.length; i++) {
+        const a = c.pts[i - 1], b = c.pts[i];
+        const ta = c.phase ? c.t[i - 1] : 0, tb = c.phase ? c.t[i] : 0;
+        const n = Math.max(1, Math.ceil(Math.hypot(b.x - a.x, b.y - a.y) / cs * 2));
+        for (let k = 0; k <= n; k++) {
+          const gx = Math.floor((a.x + (b.x - a.x) * k / n) / cs), gy = Math.floor((a.y + (b.y - a.y) * k / n) / cs);
+          if (gx < 0 || gy < 0 || gx >= GW || gy >= GH) continue;
+          const idx = gy * GW + gx, tt = ta + (tb - ta) * k / n;
+          if (tt < T[idx]) T[idx] = tt;
+        }
+      }
+    });
+
+    // Label the regions between cracks (4-connected).
+    const lab = new Int32Array(GW * GH);
+    const stack = new Int32Array(GW * GH);
+    let n = 0;
+    for (let i = 0; i < lab.length; i++) {
+      if (lab[i] || T[i] !== Infinity) continue;
+      n++;
+      let sp = 0; stack[sp++] = i; lab[i] = n;
+      while (sp) {
+        const j = stack[--sp], x = j % GW;
+        if (x > 0 && !lab[j - 1] && T[j - 1] === Infinity) { lab[j - 1] = n; stack[sp++] = j - 1; }
+        if (x < GW - 1 && !lab[j + 1] && T[j + 1] === Infinity) { lab[j + 1] = n; stack[sp++] = j + 1; }
+        if (j >= GW && !lab[j - GW] && T[j - GW] === Infinity) { lab[j - GW] = n; stack[sp++] = j - GW; }
+        if (j < lab.length - GW && !lab[j + GW] && T[j + GW] === Infinity) { lab[j + GW] = n; stack[sp++] = j + GW; }
+      }
+    }
+
+    // A shard is free once every crack touching it has formed, and it
+    // borders the shards on the other side of those cracks.
+    const freed = new Float32Array(n + 1);
+    const pairs = new Set();
+    const near = [];
+    for (let i = 0; i < lab.length; i++) {
+      if (T[i] === Infinity) continue;
+      const x = i % GW, y = (i / GW) | 0;
+      near.length = 0;
+      for (let oy = -2; oy <= 2; oy++) {
+        const yy = y + oy; if (yy < 0 || yy >= GH) continue;
+        for (let ox = -2; ox <= 2; ox++) {
+          const xx = x + ox; if (xx < 0 || xx >= GW) continue;
+          const L = lab[yy * GW + xx];
+          if (L && near.indexOf(L) < 0) near.push(L);
+        }
+      }
+      for (let a = 0; a < near.length; a++) {
+        if (T[i] > freed[near[a]]) freed[near[a]] = T[i];
+        for (let b = a + 1; b < near.length; b++) {
+          const p = near[a] < near[b] ? near[a] * 65536 + near[b] : near[b] * 65536 + near[a];
+          pairs.add(p);
+        }
+      }
+    }
+
+    // Crack cells go to whichever shard is next to them, so the shards
+    // together cover the whole screen.
+    for (let pass = 0, left = true; left && pass < 8; pass++) {
+      left = false;
+      for (let i = 0; i < lab.length; i++) {
+        if (lab[i]) continue;
+        const x = i % GW;
+        const L = (x > 0 && lab[i - 1] > 0) ? lab[i - 1] : (x < GW - 1 && lab[i + 1] > 0) ? lab[i + 1] :
+          (i >= GW && lab[i - GW] > 0) ? lab[i - GW] : (i < lab.length - GW && lab[i + GW] > 0) ? lab[i + GW] : 0;
+        if (L) lab[i] = -L; else left = true;
+      }
+      for (let i = 0; i < lab.length; i++) if (lab[i] < 0) lab[i] = -lab[i];
+    }
+    for (let i = 0; i < lab.length; i++) if (!lab[i]) lab[i] = 1;
+
+    const S = {
+      GW: GW, GH: GH, cs: cs, lab: lab, n: n, freed: freed,
+      area: new Int32Array(n + 1),
+      x0: new Int32Array(n + 1).fill(GW), y0: new Int32Array(n + 1).fill(GH),
+      x1: new Int32Array(n + 1), y1: new Int32Array(n + 1),
+      sx: new Float64Array(n + 1), sy: new Float64Array(n + 1),
+      edge: new Uint8Array(n + 1),
+      nb: []
+    };
+    for (let L = 0; L <= n; L++) S.nb.push([]);
+    for (let i = 0; i < lab.length; i++) {
+      const L = lab[i], x = i % GW, y = (i / GW) | 0;
+      S.area[L]++; S.sx[L] += x; S.sy[L] += y;
+      if (x < S.x0[L]) S.x0[L] = x; if (x > S.x1[L]) S.x1[L] = x;
+      if (y < S.y0[L]) S.y0[L] = y; if (y > S.y1[L]) S.y1[L] = y;
+      if (x === 0 || y === 0 || x === GW - 1 || y === GH - 1) S.edge[L] = 1;
+    }
+    pairs.forEach(function (p) {
+      const a = Math.floor(p / 65536), b = p % 65536;
+      S.nb[a].push(b); S.nb[b].push(a);
+    });
+    return S;
+  }
+
+  function labelAt(S, x, y) {
+    const gx = Math.min(S.GW - 1, Math.max(0, Math.floor(x / S.cs)));
+    const gy = Math.min(S.GH - 1, Math.max(0, Math.floor(y / S.cs)));
+    return S.lab[gy * S.GW + gx];
+  }
+
+  // When each shard falls (ms after the shatter starts).
+  function fallTimes(B, S, impact) {
+    const r = B.r, n = S.n, cs2 = S.cs * S.cs;
+    const fall = new Float32Array(n + 1).fill(Infinity);
+    const hold = new Float32Array(n + 1);
+    for (let L = 1; L <= n; L++) {
+      const size = Math.sqrt(S.area[L] * cs2);
+      hold[L] = (160 + r() * 420) * (0.5 + size / 120) * (S.edge[L] ? 1.35 : 1);
+    }
+    // The crushed center goes first, and some of the later fracture points
+    // open holes of their own that grow and merge.
+    const seeds = new Set();
+    const g = Math.ceil(7 / S.cs);
+    for (let oy = -g; oy <= g; oy++) for (let ox = -g; ox <= g; ox++) seeds.add(labelAt(S, impact.x + ox * S.cs, impact.y + oy * S.cs));
+    seeds.forEach(function (L) { fall[L] = S.freed[L] + 320 + r() * 160; });
+    B.origins.forEach(function (o, k) {
+      if (k === 0 || r() > 0.55) return;
+      const L = labelAt(S, o.x, o.y);
+      fall[L] = Math.min(fall[L], S.freed[L] + 500 + r() * 600);
+    });
+
+    const done = new Uint8Array(n + 1);
+    for (let it = 0; it < n; it++) {
+      let L = 0, best = Infinity;
+      for (let k = 1; k <= n; k++) if (!done[k] && fall[k] < best) { best = fall[k]; L = k; }
+      if (!L) break;
+      done[L] = 1;
+      const nb = S.nb[L];
+      for (let k = 0; k < nb.length; k++) {
+        const m = nb[k];
+        if (done[m]) continue;
+        const f = Math.max(S.freed[m] + 120 + r() * 200, best + hold[m]);
+        if (f < fall[m]) fall[m] = f;
+      }
+    }
+    let last = 0;
+    for (let L = 1; L <= n; L++) if (fall[L] !== Infinity) last = Math.max(last, fall[L]);
+    for (let L = 1; L <= n; L++) if (fall[L] === Infinity) fall[L] = last + 200 + r() * 300;
+    return fall;
+  }
+
+  function build(w, h, seed, focus) {
+    const B = new Builder(w, h, seed);
+    const main = B.mainCrack();
+
+    // The impact, just above the input box.
+    const O = {
+      x: Math.min(w - 20, Math.max(20, focus.x + B.U(-40, 40))),
+      y: Math.min(h - 20, Math.max(20, focus.y + B.U(-12, 8)))
+    };
+    B.origins.push({ x: O.x, y: O.y, t: 0 });
+    const first = B.radials(O, 0, 10 + Math.floor(B.r() * 6), {
+      onCrack: -1, speed: [2.2, 3.0], w: 1.3, dieP: 0.12, stop: 0.55, fork: [110, 230]
+    });
+    B.rings(O, first, { r0: B.U(8, 14), f: [1.18, 1.42], density: 1, maxChord: 300 });
+    B.splinters(O);
+
+    // The cascade: new fractures start from the long crack and from other
+    // cracks, each a little later and farther from the ones before.
+    const p2 = B.farthest(B.samplePoints(80, function (c) { return c.id === main.id; }));
+    if (p2) B.cascade(p2, B.U(850, 1250), p2.id);
+    const later = [B.U(1800, 2400), B.U(2800, 3400)];
+    later.forEach(function (t0) {
+      const p = B.farthest(B.samplePoints(220, function (c) { return c.kind !== 'splinter'; }));
+      if (p) B.cascade(p, t0, p.id);
+    });
+
+    const cs = Math.max(1, Math.sqrt(w * h / 2.4e6));
+    let S = raster(B, cs);
+
+    // Any slab that is still large cracks again around the time it comes
+    // loose, so big pieces mostly turn up near the edges of the screen.
+    for (let pass = 0; pass < 3; pass++) {
+      const limit = Math.max(9000, 0.022 * w * h);
+      const big = [];
+      for (let L = 1; L <= S.n; L++) if (S.area[L] * cs * cs > limit) big.push(L);
+      if (!big.length) break;
+      big.sort(function (a, b) { return S.area[b] - S.area[a]; });
+      big.slice(0, 10).forEach(function (L) {
+        let px = S.sx[L] / S.area[L] * cs, py = S.sy[L] / S.area[L] * cs;
+        if (labelAt(S, px, py) !== L) {
+          // The centroid of an odd-shaped slab can fall outside it; use any cell of it.
+          for (let i = 0; i < S.lab.length; i += 7) if (S.lab[i] === L) { px = (i % S.GW) * cs; py = ((i / S.GW) | 0) * cs; break; }
+        }
+        const P = { x: px, y: py };
+        const t0 = S.freed[L] + B.U(60, 300);
+        B.origins.push({ x: P.x, y: P.y, t: t0 });
+        const ids = B.radials(P, t0, 3 + Math.floor(B.r() * 3), {
+          onCrack: -1, speed: [1.8, 2.4], w: 1.1, dieP: 0, stop: 1, fork: [200, 400]
+        });
+        B.rings(P, ids, { r0: B.U(30, 60), f: [1.5, 1.9], density: 0.75, maxChord: 240 });
+      });
+      S = raster(B, cs);
+    }
+
+    const fall = fallTimes(B, S, O);
+    const order = [];
+    for (let L = 1; L <= S.n; L++) order.push(L);
+    order.sort(function (a, b) { return fall[a] - fall[b]; });
+
+    B.cracks.forEach(finish.bind(null, B));
+    return { w: w, h: h, cracks: B.cracks, impact: O, S: S, fall: fall, order: order, r: B.r };
+  }
+
+  // Per-segment width and brightness. Brightness drifts along the crack, with
+  // the odd bright glint where the edge catches the light.
+  function finish(B, c) {
+    const n = c.pts.length - 1;
+    c.segW = new Float32Array(n); c.segA = new Float32Array(n); c.done = new Float32Array(n);
+    let total = 0;
+    for (let i = 0; i < n; i++) total += dist(c.pts[i], c.pts[i + 1]);
+    let s = 0, v = B.gauss(), glint = 0;
+    c.tMin = Infinity;
+    for (let i = 0; i < n; i++) {
+      c.tMin = Math.min(c.tMin, c.t[i], c.t[i + 1]);
+      s += dist(c.pts[i], c.pts[i + 1]);
+      v = v * 0.9 + B.gauss() * 0.3;
+      if (!glint && B.r() < 0.02) glint = 2 + Math.floor(B.r() * 3);
+      let a = c.alpha * (0.66 + 0.34 * Math.tanh(v)), w = c.w;
+      if (glint) { glint--; a = Math.min(1, c.alpha * 1.3); w += 0.35; }
+      if (c.dangling) { const k = Math.min(1, (total - s) / 30); w *= 0.35 + 0.65 * k; a *= 0.45 + 0.55 * k; }
+      c.segW[i] = w; c.segA[i] = a;
+    }
+    c.complete = false;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Glass
+  // ---------------------------------------------------------------------------
 
   function Glass(opts) {
     this.crackCanvas = opts.crack;
@@ -136,17 +614,16 @@
     this.mctx = this.mask.getContext('2d');
     this.matrix = opts.matrix;
     this.reduced = opts.reduced;
-    this.onBreak = opts.onBreak || function () {};
+    this.colorAt = opts.colorAt || function () { return [33, 33, 33]; };
+    this.onCrack = opts.onCrack || function () {};
+    this.onShatter = opts.onShatter || function () {};
     this.onShattered = opts.onShattered || function () {};
-    this.net = build(opts.seed || (Math.random() * 1e9) | 0, 3200);
-    this.cx = 0; this.cy = 0;
-    this.progress = -1;
-    this.crackR = 0; this.crackTarget = 0;
-    this.threshold = -Infinity;
-    this.broken = false; this.shattered = false;
-    this.shards = [];
-    this.pending = [];
-    this.crackDirty = this.maskDirty = true;
+    this.seed = opts.seed || (Math.random() * 1e9) | 0;
+    this.geo = null;
+    this.focus = { x: 0, y: 0 };
+    this.tCrack = 0; this.tShatter = 0; this.extra = 0;
+    this.shattered = false;
+    this.sprites = [];
   }
 
   Glass.prototype.resize = function (w, h, dpr) {
@@ -155,205 +632,250 @@
       c.width = Math.round(w * dpr); c.height = Math.round(h * dpr);
     });
     if (this.matrix) this.matrix.resize(w, h, dpr);
-    this.measure();
+    // Before the first crack the layout is free to change. After it, keep
+    // the same cracks unless the screen grew past them (a phone keyboard
+    // closing, say, should not redraw the whole fracture).
+    if (this.geo && (!this.tCrack || w > this.geo.w + 1 || h > this.geo.h + 1)) this.geo = null;
+    this.dirty = true;
   };
 
-  Glass.prototype.setCenter = function (x, y) {
-    this.cx = x; this.cy = y;
-    this.measure();
+  Glass.prototype.setFocus = function (x, y) {
+    if (!this.tCrack && (Math.abs(x - this.focus.x) > 1 || Math.abs(y - this.focus.y) > 1)) this.geo = null;
+    this.focus = { x: x, y: y };
   };
 
-  // Which cells are on screen, and the score that clears all of them.
-  Glass.prototype.measure = function () {
-    const self = this;
-    let top = -Infinity;
-    this.net.cells.forEach(function (c) {
-      const b = c.box;
-      c.visible = b[2] + self.cx > 0 && b[0] + self.cx < self.w && b[3] + self.cy > 0 && b[1] + self.cy < self.h;
-      if (c.visible) top = Math.max(top, c.score);
-    });
-    this.fullScore = top + 0.01;
-    this.crackDirty = this.maskDirty = true;
+  // Builds the fracture ahead of time so the first crack doesn't stall.
+  Glass.prototype.prepare = function () {
+    if (!this.geo && this.w) { this.geo = build(this.w, this.h, this.seed, this.focus); this.dirty = true; }
   };
 
-  Glass.prototype.setProgress = function (p, now) {
-    if (p <= this.progress) return;
-    this.progress = p;
-    this.crackTarget = 34 * Math.pow(320, Math.min(p, 1.2));
-    if (this.crackR === 0) this.crackR = this.reduced ? this.crackTarget : 6;
-    if (p < BREAK_AT) return;
-
-    if (!this.broken) {
-      this.broken = true;
-      // The weakest piece at the center always goes first.
-      let first = null;
-      this.net.cells.forEach(function (c) { if (c.band === -1 && (!first || c.score < first.score)) first = c; });
-      this.drop(first, now);
-      this.onBreak();
-    }
-    const t = (p - BREAK_AT) / (1 - BREAK_AT);
-    this.threshold = p >= 1 ? Infinity : 0.6 + t * (this.fullScore - 0.6);
-    this.spread(now);
+  Glass.prototype.crack = function (now) {
+    if (this.tCrack) return;
+    this.prepare();
+    this.tCrack = now;
+    this.onCrack();
   };
 
-  Glass.prototype.drop = function (c, due) {
-    c.fallen = true; c.due = due; c.landed = false;
-    this.pending.push(c);
+  Glass.prototype.shatter = function (now) {
+    if (this.tShatter) return;
+    if (!this.tCrack) this.crack(now);
+    this.tShatter = now;
+    this.onShatter();
   };
 
-  // Cells under the threshold fall once a neighbor has, so the hole stays in one piece.
-  Glass.prototype.spread = function (now) {
-    const cells = this.net.cells, thr = this.threshold;
-    let wave = 1, changed = true;
-    while (changed) {
-      changed = false;
-      const batch = [];
-      for (let i = 0; i < cells.length; i++) {
-        const c = cells[i];
-        if (c.fallen || c.score >= thr) continue;
-        for (let k = 0; k < c.nb.length; k++) if (c.nb[k].fallen) { batch.push(c); break; }
-      }
-      for (let i = 0; i < batch.length; i++) {
-        this.drop(batch[i], now + (this.reduced ? 0 : wave * STAGGER_MS));
-        changed = true;
-      }
-      wave++;
-    }
+  // Typing after the shatter hurries it along.
+  Glass.prototype.boost = function (ms) { if (this.tShatter) this.extra += ms; };
+
+  Glass.prototype.reset = function () {
+    const W = this.crackCanvas.width, H = this.crackCanvas.height;
+    this.cctx.setTransform(1, 0, 0, 1, 0, 0); this.cctx.clearRect(0, 0, W, H);
+    this.mctx.setTransform(1, 0, 0, 1, 0, 0); this.mctx.clearRect(0, 0, W, H);
+    this.hctx.setTransform(1, 0, 0, 1, 0, 0); this.hctx.clearRect(0, 0, W, H);
+    this.geo.cracks.forEach(function (c) { c.done.fill(0); c.complete = false; });
+    this.fallen = new Uint8Array(this.geo.S.n + 1);
+    this.next = 0;
+    this.anyFallen = false;
+    this.bruised = false;
+    this.sprites = [];
+    if (this.shattered) this.fillAll();
+    this.dirty = false;
   };
 
   Glass.prototype.frame = function (now) {
-    // Ease the crack outward.
-    if (this.crackR < this.crackTarget) {
-      const dt = this.lastFrame ? Math.min(now - this.lastFrame, 100) / 1000 : 0;
-      this.crackR = Math.min(this.crackTarget, this.crackR + Math.max(30 * dt, (this.crackTarget - this.crackR) * Math.min(1, dt * 7)));
-      this.crackDirty = true;
-    }
-    this.lastFrame = now;
+    if (!this.tCrack) return;
+    if (!this.geo) this.prepare();
+    if (this.dirty) this.reset();
+    const tc = this.reduced ? Infinity : now - this.tCrack;
+    const ts = this.tShatter ? now - this.tShatter + this.extra : -Infinity;
+    const tsReveal = this.tShatter && this.reduced ? Infinity : ts;
 
-    // Cells whose time has come leave the glass.
-    if (this.pending.length) {
-      const keep = [];
-      for (let i = 0; i < this.pending.length; i++) {
-        const c = this.pending[i];
-        if (c.due <= now) { c.landed = true; this.addShard(c); this.maskDirty = this.crackDirty = true; }
-        else keep.push(c);
+    if (!this.shattered) {
+      this.drawCracks(tc, tsReveal);
+      if (this.tShatter) {
+        if (!this.bruised) this.bruise();
+        const g = this.geo;
+        while (this.next < g.order.length && g.fall[g.order[this.next]] <= ts) {
+          const L = g.order[this.next++];
+          this.drop(L, ts - g.fall[L]);
+        }
+        if (this.next >= g.order.length) {
+          this.shattered = true;
+          this.fillAll();
+          this.onShattered();
+        }
       }
-      this.pending = keep;
     }
 
-    if (this.maskDirty) this.drawMask();
-    if (this.crackDirty) this.drawCracks();
-
-    if (this.broken) {
+    if (this.anyFallen || this.shattered) {
       if (this.matrix) this.matrix.update(now);
       this.drawHole(now);
     }
+  };
 
-    if (this.broken && !this.shattered && this.progress >= 1 && !this.pending.length) {
-      const left = this.net.cells.some(function (c) { return c.visible && !c.landed; });
-      if (!left) { this.shattered = true; this.maskDirty = this.crackDirty = true; this.onShattered(); }
+  // Draws whatever part of each crack has formed since the last frame.
+  Glass.prototype.drawCracks = function (tc, ts) {
+    const ctx = this.cctx, d = this.dpr;
+    ctx.setTransform(d, 0, 0, d, 0, 0);
+    ctx.lineCap = 'round';
+    const cracks = this.geo.cracks;
+    for (let k = 0; k < cracks.length; k++) {
+      const c = cracks[k];
+      if (c.complete) continue;
+      const T = c.phase ? ts : tc;
+      if (T < c.tMin) continue;
+      let all = true;
+      for (let i = 0; i < c.done.length; i++) {
+        if (c.done[i] >= 1) continue;
+        let a = c.pts[i], b = c.pts[i + 1], ta = c.t[i], tb = c.t[i + 1];
+        if (tb < ta) { const p = a; a = b; b = p; const q = ta; ta = tb; tb = q; }
+        const f = T >= tb ? 1 : T <= ta ? 0 : (T - ta) / (tb - ta);
+        if (f < 1) all = false;
+        if (f <= c.done[i]) continue;
+        const f0 = c.done[i];
+        c.done[i] = f;
+        const x0 = a.x + (b.x - a.x) * f0, y0 = a.y + (b.y - a.y) * f0;
+        const x1 = a.x + (b.x - a.x) * f, y1 = a.y + (b.y - a.y) * f;
+        const w = c.segW[i], al = c.segA[i];
+        ctx.beginPath(); ctx.moveTo(x0 + 0.7, y0 + 0.9); ctx.lineTo(x1 + 0.7, y1 + 0.9);
+        ctx.strokeStyle = 'rgba(0,0,0,' + (0.5 * al).toFixed(3) + ')'; ctx.lineWidth = w + 0.8; ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1);
+        ctx.strokeStyle = 'rgba(226,236,242,' + al.toFixed(3) + ')'; ctx.lineWidth = w; ctx.stroke();
+        if (c.kind === 'main') {
+          // The far face of the crack, seen faintly through the glass.
+          const len = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+          const ox = -(b.y - a.y) / len * 1.8, oy = (b.x - a.x) / len * 1.8;
+          ctx.beginPath(); ctx.moveTo(x0 + ox, y0 + oy); ctx.lineTo(x1 + ox, y1 + oy);
+          ctx.strokeStyle = 'rgba(200,222,232,' + (0.2 * al).toFixed(3) + ')'; ctx.lineWidth = 0.8; ctx.stroke();
+        }
+      }
+      if (all) c.complete = true;
     }
   };
 
-  Glass.prototype.path = function (ctx, c) {
-    const p = c.poly;
-    ctx.moveTo(p[0].x, p[0].y);
-    for (let i = 1; i < p.length; i++) ctx.lineTo(p[i].x, p[i].y);
-    ctx.closePath();
-  };
-
-  Glass.prototype.drawMask = function () {
-    const ctx = this.mctx, self = this;
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.clearRect(0, 0, this.mask.width, this.mask.height);
-    if (this.shattered) {
-      ctx.fillStyle = '#000';
-      ctx.fillRect(0, 0, this.mask.width, this.mask.height);
-    } else {
-      ctx.setTransform(this.dpr, 0, 0, this.dpr, this.cx * this.dpr, this.cy * this.dpr);
+  // A frosted, crushed patch where the glass was hit.
+  Glass.prototype.bruise = function () {
+    this.bruised = true;
+    const ctx = this.cctx, O = this.geo.impact, r = rng(this.seed ^ 0x5bd1);
+    ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+    for (let k = 0; k < 7; k++) {
+      const a = r() * TAU, d = r() * 5, rad = 4 + r() * 10;
+      const x = O.x + Math.cos(a) * d, y = O.y + Math.sin(a) * d;
+      const g = ctx.createRadialGradient(x, y, 0, x, y, rad);
+      g.addColorStop(0, 'rgba(232,240,246,' + (0.1 + r() * 0.12).toFixed(3) + ')');
+      g.addColorStop(1, 'rgba(232,240,246,0)');
+      ctx.fillStyle = g;
       ctx.beginPath();
-      this.net.cells.forEach(function (c) { if (c.landed) self.path(ctx, c); });
-      ctx.fillStyle = '#000';
-      ctx.fill();
-      // A thin stroke hides seams between neighboring cells.
-      ctx.lineWidth = 1.5; ctx.lineJoin = 'round'; ctx.strokeStyle = '#000';
-      ctx.stroke();
+      // Ragged outline, not a circle.
+      for (let i = 0; i < 9; i++) {
+        const b = i / 9 * TAU, rr = rad * (0.6 + r() * 0.5);
+        if (i) ctx.lineTo(x + Math.cos(b) * rr, y + Math.sin(b) * rr); else ctx.moveTo(x + Math.cos(b) * rr, y + Math.sin(b) * rr);
+      }
+      ctx.closePath(); ctx.fill();
     }
-    this.maskDirty = false;
   };
 
-  function strokePartial(ctx, pts, f) {
-    let total = 0;
-    for (let i = 1; i < pts.length; i++) total += Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y);
-    let left = total * f;
-    ctx.moveTo(pts[0].x, pts[0].y);
-    for (let i = 1; i < pts.length && left > 0; i++) {
-      const a = pts[i - 1], b = pts[i];
-      const len = Math.hypot(b.x - a.x, b.y - a.y);
-      if (len <= left) { ctx.lineTo(b.x, b.y); left -= len; }
-      else { ctx.lineTo(a.x + (b.x - a.x) * left / len, a.y + (b.y - a.y) * left / len); left = 0; }
-    }
+  function toCanvas(img) {
+    const c = document.createElement('canvas');
+    c.width = img.width; c.height = img.height;
+    c.getContext('2d').putImageData(img, 0, 0);
+    return c;
   }
 
-  Glass.prototype.drawCracks = function () {
-    const ctx = this.cctx, R = this.crackR, self = this;
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.clearRect(0, 0, this.crackCanvas.width, this.crackCanvas.height);
-    this.crackDirty = false;
-    if (R <= 0 || this.shattered) return;
-    ctx.setTransform(this.dpr, 0, 0, this.dpr, this.cx * this.dpr, this.cy * this.dpr);
+  // Shard L leaves the glass: cut it out of the screen, light up the broken
+  // edge it leaves behind, and send a copy of it falling.
+  Glass.prototype.drop = function (L, age) {
+    const g = this.geo, S = g.S, lab = S.lab, GW = S.GW, GH = S.GH, cs = S.cs, d = this.dpr;
+    const fallen = this.fallen;
+    const bx = Math.max(0, S.x0[L] - 1), by = Math.max(0, S.y0[L] - 1);
+    const bw = Math.min(GW, S.x1[L] + 2) - bx, bh = Math.min(GH, S.y1[L] + 2) - by;
+    const areaPx = S.area[L] * cs * cs;
+    const sprite = !this.reduced && age < 1400 && areaPx >= 25 && this.sprites.length < MAX_SPRITES;
 
-    const path = new Path2D();
-    this.net.lines.forEach(function (l) {
-      let f;
-      if (l.kind === 'radial') f = (R - l.r0) / (l.r1 - l.r0);
-      else { if (!l.keep) return; f = (R - l.r * 1.08) / (l.r * 0.35); }
-      if (f <= 0) return;
-      const sub = new Path2D();
-      strokePartial(sub, l.pts, Math.min(f, 1));
-      path.addPath(sub);
-    });
+    const dil = new ImageData(bw, bh), core = new ImageData(bw, bh), rim = new ImageData(bw, bh);
+    const tex = sprite ? new ImageData(bw, bh) : null;
+    const shade = sprite ? 0.9 + g.r() * 0.2 : 1, sheenA = g.r() * TAU;
+    const sc = Math.cos(sheenA) / Math.max(1, bw), ss = Math.sin(sheenA) / Math.max(1, bh);
+    let rimN = 0;
+    for (let y = 0; y < bh; y++) {
+      const gy = by + y;
+      for (let x = 0; x < bw; x++) {
+        const gx = bx + x, i = gy * GW + gx, p = (y * bw + x) * 4;
+        const inL = lab[i] === L;
+        let touch = inL, edge = false;
+        for (let oy = -1; oy <= 1; oy++) {
+          const yy = gy + oy; if (yy < 0 || yy >= GH) continue;
+          for (let ox = -1; ox <= 1; ox++) {
+            const xx = gx + ox; if (xx < 0 || xx >= GW || (!ox && !oy)) continue;
+            if (lab[yy * GW + xx] === L) touch = true; else if (inL) edge = true;
+          }
+        }
+        if (!touch) continue;
+        dil.data[p + 3] = 255;
+        if (inL) core.data[p + 3] = 255;
+        else if (!fallen[lab[i]]) {
+          // Light from the upper left catches edges that face it.
+          const up = (gy > 0 && lab[i - GW] === L) || (gx > 0 && lab[i - 1] === L);
+          rim.data[p] = 214; rim.data[p + 1] = 232; rim.data[p + 2] = 236;
+          rim.data[p + 3] = up ? 215 : 120;
+          rimN++;
+        }
+        if (tex) {
+          const base = this.colorAt(gx * cs, gy * cs);
+          const l = shade * (0.92 + 0.16 * (x * sc + y * ss));
+          if (!inL) {
+            tex.data[p] = base[0] * l + 70; tex.data[p + 1] = base[1] * l + 88; tex.data[p + 2] = base[2] * l + 86; tex.data[p + 3] = 150;
+          } else if (edge) {
+            tex.data[p] = base[0] * l + 26; tex.data[p + 1] = base[1] * l + 34; tex.data[p + 2] = base[2] * l + 34; tex.data[p + 3] = 245;
+          } else {
+            tex.data[p] = base[0] * l + 3; tex.data[p + 1] = base[1] * l + 5; tex.data[p + 2] = base[2] * l + 6; tex.data[p + 3] = 245;
+          }
+        }
+      }
+    }
+    const X = bx * cs * d, Y = by * cs * d, W = bw * cs * d, H = bh * cs * d;
+    this.mctx.setTransform(1, 0, 0, 1, 0, 0);
+    this.mctx.drawImage(toCanvas(dil), X, Y, W, H);
+    const cc = this.cctx;
+    cc.setTransform(1, 0, 0, 1, 0, 0);
+    cc.globalCompositeOperation = 'destination-out';
+    cc.drawImage(toCanvas(core), X, Y, W, H);
+    cc.globalCompositeOperation = 'source-over';
+    if (rimN) cc.drawImage(toCanvas(rim), X, Y, W, H);
+    fallen[L] = 1;
+    this.anyFallen = true;
 
-    // Impact point: a faint frosted bruise.
-    const g = ctx.createRadialGradient(0, 0, 0, 0, 0, Math.min(R, 40));
-    g.addColorStop(0, 'rgba(230, 238, 245, 0.32)');
-    g.addColorStop(1, 'rgba(230, 238, 245, 0)');
-    ctx.fillStyle = g;
-    ctx.beginPath(); ctx.arc(0, 0, Math.min(R, 40), 0, TAU); ctx.fill();
-
-    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-    ctx.save();
-    ctx.translate(0.8, 1);
-    ctx.strokeStyle = 'rgba(0, 0, 0, 0.55)'; ctx.lineWidth = 1.6;
-    ctx.stroke(path);
-    ctx.restore();
-    ctx.strokeStyle = 'rgba(232, 238, 244, 0.82)'; ctx.lineWidth = 1;
-    ctx.stroke(path);
-
-    // Bright broken edge around the hole. Half of it is covered by the hole itself.
-    if (this.broken) {
-      ctx.beginPath();
-      this.net.cells.forEach(function (c) { if (c.landed) self.path(ctx, c); });
-      ctx.strokeStyle = 'rgba(225, 235, 245, 0.55)'; ctx.lineWidth = 4;
-      ctx.stroke();
-      ctx.setTransform(1, 0, 0, 1, 0, 0);
-      ctx.globalCompositeOperation = 'destination-out';
-      ctx.drawImage(this.mask, 0, 0);
-      ctx.globalCompositeOperation = 'source-over';
+    if (sprite) {
+      const O = g.impact, size = Math.sqrt(areaPx);
+      const cx = (bx + bw / 2) * cs, cy = (by + bh / 2) * cs;
+      const dd = Math.hypot(cx - O.x, cy - O.y) || 1, r = g.r;
+      const out = (15 + r() * 55) * (size < 60 ? 1 : 0.4);
+      this.sprites.push({
+        tex: toCanvas(tex), w: bw * cs, h: bh * cs,
+        x: cx, y: cy, vx: (cx - O.x) / dd * out + (r() - 0.5) * 30, vy: size > 120 ? r() * 20 : -60 + r() * 80,
+        z: 0, vz: 0.35 + r() * 0.5 + 12 / (size + 12),
+        axis: r() * Math.PI, tilt: 0, vt: (1.2 + r() * 3.4) / (1 + size / 140) * (r() < 0.5 ? -1 : 1),
+        rot: 0, vr: (r() - 0.5) * 2.2 / (1 + size / 180),
+        glint: r() * TAU, age: 0
+      });
+      // A sprite dropped late (after a resize or a jump) starts partway through.
+      if (age > 0) this.stepSprite(this.sprites[this.sprites.length - 1], age / 1000);
     }
   };
 
-  Glass.prototype.addShard = function (c) {
-    if (this.reduced || this.shards.length > 260) return;
-    const dist = Math.hypot(c.cx, c.cy) || 1;
-    this.shards.push({
-      poly: c.poly.map(function (p) { return { x: p.x - c.cx, y: p.y - c.cy }; }),
-      x: c.cx + this.cx, y: c.cy + this.cy,
-      vx: c.cx / dist * (20 + Math.random() * 60),
-      vy: -30 - Math.random() * 60,
-      rot: 0, vr: (Math.random() - 0.5) * 2.4,
-      age: 0, life: 1.1 + Math.random() * 0.6
-    });
+  Glass.prototype.fillAll = function () {
+    this.mctx.setTransform(1, 0, 0, 1, 0, 0);
+    this.mctx.fillStyle = '#000';
+    this.mctx.fillRect(0, 0, this.mask.width, this.mask.height);
+    this.cctx.setTransform(1, 0, 0, 1, 0, 0);
+    this.cctx.clearRect(0, 0, this.crackCanvas.width, this.crackCanvas.height);
+  };
+
+  Glass.prototype.stepSprite = function (s, dt) {
+    s.age += dt;
+    s.vy += GRAVITY * dt;
+    s.x += s.vx * dt; s.y += s.vy * dt;
+    s.z += s.vz * dt;
+    s.tilt += s.vt * dt; s.rot += s.vr * dt;
   };
 
   Glass.prototype.drawHole = function (now) {
@@ -362,36 +884,44 @@
     this.lastHole = now;
 
     ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.globalAlpha = 1;
     ctx.clearRect(0, 0, this.holeCanvas.width, this.holeCanvas.height);
     ctx.drawImage(this.mask, 0, 0);
     ctx.globalCompositeOperation = 'source-in';
     if (this.matrix) ctx.drawImage(this.matrix.canvas, 0, 0);
     ctx.globalCompositeOperation = 'source-over';
 
-    // Shards tumble away and fade.
+    // Shards fall away from the viewer: they drop, turn over in depth, shrink,
+    // and flash when a face catches the light.
     const keep = [];
-    for (let i = 0; i < this.shards.length; i++) {
-      const s = this.shards[i];
-      s.age += dt; s.vy += 1500 * dt;
-      s.x += s.vx * dt; s.y += s.vy * dt; s.rot += s.vr * dt;
-      const a = 1 - s.age / s.life;
-      if (a <= 0 || s.y > this.h + 400) continue;
+    for (let i = 0; i < this.sprites.length; i++) {
+      const s = this.sprites[i];
+      this.stepSprite(s, dt);
+      const k = 1 / (1 + s.z);
+      if (k < 0.3 || s.y - s.h * k > this.h + 40) continue;
       keep.push(s);
-      const k = 1 - s.age * 0.18;
-      ctx.setTransform(d * k * Math.cos(s.rot), d * k * Math.sin(s.rot), -d * k * Math.sin(s.rot), d * k * Math.cos(s.rot), s.x * d, s.y * d);
-      ctx.beginPath();
-      ctx.moveTo(s.poly[0].x, s.poly[0].y);
-      for (let p = 1; p < s.poly.length; p++) ctx.lineTo(s.poly[p].x, s.poly[p].y);
-      ctx.closePath();
-      ctx.fillStyle = 'rgba(38, 38, 40, ' + (0.92 * a) + ')';
-      ctx.fill();
-      ctx.strokeStyle = 'rgba(230, 238, 245, ' + (0.5 * a) + ')';
-      ctx.lineWidth = 1.2;
-      ctx.stroke();
+      const ct = Math.cos(s.tilt), ca = Math.cos(s.axis), sa = Math.sin(s.axis);
+      // Squash along the tilt axis: R(axis) · scale(1, cos tilt) · R(-axis).
+      const t00 = ca * ca + ct * sa * sa, t01 = (1 - ct) * sa * ca, t11 = sa * sa + ct * ca * ca;
+      const cr = Math.cos(s.rot), sr = Math.sin(s.rot), m = d * k;
+      const a = m * (cr * t00 - sr * t01), b = m * (sr * t00 + cr * t01);
+      const c = m * (cr * t01 - sr * t11), e = m * (sr * t01 + cr * t11);
+      ctx.setTransform(a, b, c, e, s.x * d, s.y * d);
+      const fade = Math.min(1, (k - 0.3) / 0.25);
+      ctx.globalAlpha = fade * (0.55 + 0.45 * Math.abs(ct));
+      ctx.drawImage(s.tex, -s.w / 2, -s.h / 2, s.w, s.h);
+      const gl = Math.pow(Math.max(0, Math.sin(s.tilt + s.glint)), 8) * 0.55 * fade;
+      if (gl > 0.02) {
+        ctx.globalAlpha = gl;
+        ctx.globalCompositeOperation = 'lighter';
+        ctx.drawImage(s.tex, -s.w / 2, -s.h / 2, s.w, s.h);
+        ctx.globalCompositeOperation = 'source-over';
+      }
     }
-    this.shards = keep;
+    ctx.globalAlpha = 1;
+    this.sprites = keep;
   };
 
-  Glass.BREAK_AT = BREAK_AT;
+  Glass.TOTAL_MS = TOTAL_MS;
   window.Glass = Glass;
 })();
