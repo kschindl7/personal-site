@@ -45,7 +45,7 @@ let mode = 'loading'; // loading | play | dialog | menu | panel
 let clock = 0;
 
 // ---------- Startup ----------
-if (new URLSearchParams(location.search).get('view') === 'page') location.replace('../?view=page');
+if (new URLSearchParams(location.search).get('view') === 'page') location.replace('../tavern/?view=page');
 
 function fail(msg) {
   $('loading').hidden = true;
@@ -83,7 +83,7 @@ resize();
 
 // Section text lives in the main site's index.html, so both versions share it.
 let contentDoc = null;
-fetch('../index.html').then(function (r) { return r.text(); }).then(function (html) {
+fetch('../tavern/index.html').then(function (r) { return r.text(); }).then(function (html) {
   contentDoc = new DOMParser().parseFromString(html, 'text/html');
 }).catch(function () { contentDoc = null; });
 
@@ -317,7 +317,7 @@ function openSection(id) {
     });
   } else {
     const p = document.createElement('p');
-    p.innerHTML = 'This section couldn\'t load here. <a href="../?view=page#' + id + '">Read it on the plain page</a>.';
+    p.innerHTML = 'This section couldn\'t load here. <a href="../tavern/?view=page#' + id + '">Read it on the plain page</a>.';
     panelBody.appendChild(p);
   }
   openModal(panelEl, panelTitle);
