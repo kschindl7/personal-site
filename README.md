@@ -1,6 +1,6 @@
 # KyleGPT
 
-Kyle's personal site. It opens on a chat page that looks like an AI assistant, titled KyleGPT. After a visitor types 5 characters, one long crack runs across the glass from near the bottom-left corner to near the top-right. At 10 characters the glass is hit just above the input box: radial cracks burst out, fork and stop where they meet other cracks, concentric cracks join them at staggered points, and later fractures start from the existing cracks. Shards of every shape and size fall away, showing green Matrix-style rain underneath until it fills the screen. Once half the glass is going, the input bar gives way too: one end is heavier, so it swings down around the other end, then slips free and falls. When the screen is gone, a menu condenses out of the rain: each letter locks in where a falling stream runs through it, spelling out `kyle/` and the sections. Choosing a section drops its letters and pours that section into a panel over the rain.
+Kyle's personal site. It opens on a chat page that looks like an AI assistant, titled KyleGPT. After a visitor types 5 characters, one long crack runs across the glass from near the bottom-left corner to near the top-right. At 10 characters the glass is hit just above the input box: radial cracks burst out, fork and stop where they meet other cracks, concentric cracks join them at staggered points, and later fractures start from the existing cracks. Shards of every shape and size fall away, showing green Matrix-style rain underneath until it fills the screen. Once half the glass is going, the input bar gives way too: one end is heavier, so it swings down around the other end, then slips free and falls. When the screen is gone, a menu forms in the rain, laid out in a row (wrapping on phones): each letter appears where a falling stream lands on it, spelling out `kyle/` and the sections. From then on the rain treats the words as solid: it splashes on the letters, pools along their tops, runs off the ends and pours down beside them, leaving the space under each word dry. Choosing a section drops its letters and pours that section into a panel over the rain.
 
 There is no build step. Everything is plain HTML, CSS, and JavaScript, and all of the effects are drawn in code.
 
@@ -14,7 +14,7 @@ There is no build step. Everything is plain HTML, CSS, and JavaScript, and all o
 
 - `kylegpt/main.js`: the chat page, the 5- and 10-character triggers, and the timing knobs in `CONFIG` at the top.
 - `kylegpt/glass.js`: builds the fracture (the long crack, the impact, the cascade), works out the shards from the regions the cracks enclose, and draws the cracks, the hole and the falling shards.
-- `kylegpt/matrix.js`: the green rain, including locking the menu's letters in place as rain runs through them.
+- `kylegpt/matrix.js`: the green rain, including how it forms the menu's letters and then splashes on them, pools on top and spills off the ends.
 - `kylegpt/menu.js`: the menu that forms in the rain and the section panel. Its links in `index.html` point at the plain page, so they still work without JavaScript, and the panel reads each section from `tavern/index.html`, so the content still lives in one place.
 - `kylegpt/style.css`: the chat layout.
 

@@ -21,7 +21,6 @@
     this.panel = opts.panel;
     this.veil = opts.veil;
     this.reduced = opts.reduced;
-    this.shade = this.nav.querySelector('.rain-shade');
     this.started = false;
     this.busy = false;
     this.picked = null;
@@ -44,6 +43,13 @@
       return { el: el, text: text, letters: letters, head: el.classList.contains('rain-head') };
     });
     this.matrix.onLock = function (t) { self.show(t); };
+    // Each later drop that lands makes the letter glint for a moment.
+    this.matrix.onHit = function (t) {
+      const span = t.span;
+      if (!span.classList.contains('set')) return;
+      span.classList.add('hit');
+      setTimeout(function () { span.classList.remove('hit'); }, 90);
+    };
 
     this.nav.addEventListener('click', function (e) {
       const a = e.target.closest('a[data-section]');
@@ -58,38 +64,46 @@
     });
   }
 
-  // Lay the lines out on the rain's grid, centered on the screen.
+  // Lay the words out in a row on the rain's grid, wrapping onto more rows
+  // on narrow screens. Rows are far enough apart for rain to spill between.
   Menu.prototype.layout = function () {
     const m = this.matrix, s = m.size;
     const cols = m.cols.length, rows = Math.floor(m.h / s);
-    const gap = Math.max(2, Math.ceil(48 / s));        // rows between links: comfortable to tap
-    const indent = 2;
-    let width = 0;
-    this.lines.forEach(function (l) { width = Math.max(width, l.text.length + (l.head ? 0 : indent)); });
-    const c0 = Math.max(1, Math.floor((cols - width) / 2));
-    const r0 = Math.max(1, Math.floor((rows - gap * (this.lines.length - 1)) / 2));
+    const gap = 3;
+    const maxW = cols - 4;
+    const lines = [];
+    let cur = [], w = 0;
+    this.lines.forEach(function (l) {
+      const need = (cur.length ? gap : 0) + l.text.length;
+      if (cur.length && w + need > maxW) { lines.push({ items: cur, w: w }); cur = []; w = 0; }
+      w += (cur.length ? gap : 0) + l.text.length;
+      cur.push(l);
+    });
+    if (cur.length) lines.push({ items: cur, w: w });
+
+    const rowGap = Math.max(4, Math.ceil(72 / s));
+    const r0 = Math.max(3, Math.round(rows * 0.46 - (lines.length - 1) * rowGap / 2));
     const targets = [];
-    this.lines.forEach(function (l, k) {
-      const col = c0 + (l.head ? 0 : indent), row = r0 + k * gap - (l.head ? 1 : 0);
-      l.el.style.left = col * s + 'px';
-      l.el.style.top = row * s + 'px';
-      l.el.style.width = l.text.length * s + 'px';
-      l.el.style.height = s + 'px';
-      l.el.style.fontSize = s + 'px';
-      l.el.style.lineHeight = s + 'px';
-      l.letters.forEach(function (t, i) {
-        t.col = col + i; t.row = row;
-        t.span.style.left = i * s + 'px';
-        t.span.style.width = s + 'px';
-        targets.push(t);
+    lines.forEach(function (line, k) {
+      const row = r0 + k * rowGap;
+      let col = Math.max(2, Math.floor((cols - line.w) / 2));
+      line.items.forEach(function (l) {
+        const left = col, right = col + l.text.length - 1;
+        l.el.style.left = col * s + 'px';
+        l.el.style.top = row * s + 'px';
+        l.el.style.width = l.text.length * s + 'px';
+        l.el.style.height = s + 'px';
+        l.el.style.fontSize = s + 'px';
+        l.el.style.lineHeight = s + 'px';
+        l.letters.forEach(function (t, i) {
+          t.col = col + i; t.row = row; t.left = left; t.right = right;
+          t.span.style.left = i * s + 'px';
+          t.span.style.width = s + 'px';
+          targets.push(t);
+        });
+        col += l.text.length + gap;
       });
     });
-    // A soft dark patch behind the words so they read clearly over the rain.
-    const sh = this.shade.style;
-    sh.left = (c0 - 7) * s + 'px';
-    sh.top = (r0 - 6) * s + 'px';
-    sh.width = (width + 14) * s + 'px';
-    sh.height = (gap * (this.lines.length - 1) + 11) * s + 'px';
     m.setTargets(targets);
     this.targets = targets;
   };

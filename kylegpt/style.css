@@ -194,31 +194,28 @@ body.shattered .app { visibility: hidden; }
 }
 
 .rain-menu { position: fixed; inset: 0; z-index: 3; pointer-events: none; font-family: var(--mono); }
-.rain-shade {
-  position: absolute;
-  background: radial-gradient(closest-side, rgba(0, 0, 0, 0.94), rgba(0, 0, 0, 0.86) 62%, rgba(0, 0, 0, 0));
-}
 .rain-head, .rain-menu a { position: absolute; margin: 0; white-space: nowrap; }
 .rain-head { color: var(--rain-dim); }
 .rain-menu a { pointer-events: auto; color: var(--rain-text); text-decoration: none; transition: opacity 0.3s; }
 
-/* Each letter waits invisibly until the rain reaches it, flashes, then settles. */
+/* Each letter waits invisibly until the rain reaches it, flashes, then settles.
+   Later drops make it glint for a moment as they land. */
 .rain-l { position: absolute; top: 0; height: 100%; opacity: 0; }
 .rain-l.on { opacity: 1; color: var(--rain-flash); text-shadow: 0 0 6px #b9ffd0, 0 0 14px rgba(31, 209, 106, 0.8); }
 .rain-l.on.set { color: inherit; text-shadow: 0 0 8px rgba(31, 209, 106, 0.4); transition: color 0.7s ease-out, text-shadow 0.7s ease-out; }
+.rain-l.on.set.hit { color: #e9fff0; text-shadow: 0 0 6px rgba(185, 255, 208, 0.8); transition: none; }
 
-/* A generous hit area around each word, and a prompt marker on hover or focus. */
-.rain-menu a::before { content: ""; position: absolute; inset: -15px -14px -15px -30px; border-radius: 6px; }
-.rain-menu a::after {
-  content: ">"; position: absolute; left: -1.25em; top: 0;
-  color: var(--rain); opacity: 0; transition: opacity 0.15s;
+/* No box: a word lights up when pointed at. The hit area is still generous. */
+.rain-menu a::before { content: ""; position: absolute; inset: -16px -10px; border-radius: 4px; }
+.rain-menu a:hover .rain-l.on.set, .rain-menu a:focus-visible .rain-l.on.set {
+  color: var(--rain-flash);
+  text-shadow: 0 0 6px #b9ffd0, 0 0 16px rgba(31, 209, 106, 0.85);
+  transition: color 0.15s, text-shadow 0.15s;
 }
-.rain-menu a:hover::before { background: rgba(31, 209, 106, 0.1); }
-.rain-menu a:hover::after, .rain-menu a:focus-visible::after { opacity: 1; }
 .rain-menu a:focus-visible { outline: none; }
-.rain-menu a:focus-visible::before { outline: 1px solid rgba(160, 255, 190, 0.75); background: rgba(31, 209, 106, 0.1); }
+.rain-menu a:focus-visible::before { outline: 1px solid rgba(160, 255, 190, 0.7); }
 .rain-menu.chosen a:not(.picked), .rain-menu.chosen .rain-head { opacity: 0.18; }
-.rain-menu.chosen a.picked::after, .rain-menu.chosen a.picked::before { opacity: 0; background: none; outline: none; }
+.rain-menu.chosen a.picked::before { outline: none; }
 
 /* A section pours down into a panel over the dimmed rain. */
 .rain-veil { position: fixed; inset: 0; z-index: 6; background: rgba(0, 0, 0, 0.6); }
