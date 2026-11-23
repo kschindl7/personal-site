@@ -47,6 +47,7 @@
     colorAt: function (x) { return x < sideRight ? sideColor : bgColor; },
     onCrack: function () { jolt('small'); },
     onShatter: function () { jolt(); },
+    onHalf: function () { dropBar(); },
     onShattered: function () {
       document.body.classList.add('shattered');
       input.blur();
@@ -86,6 +87,57 @@
     if (shatterTimer) return;
     const wait = Math.max(0, crackedAt + CONFIG.minGapMs - now);
     shatterTimer = setTimeout(function () { glass.shatter(performance.now()); }, wait);
+  }
+
+  // The input bar loses its support once half the glass is going. One end is
+  // heavier, so it swings down around the other end first, then slips free
+  // and falls, still turning.
+  let barDropping = false;
+  function dropBar() {
+    if (barDropping) return;
+    barDropping = true;
+    input.blur();
+    form.classList.add('falling');
+    if (reduced) { setTimeout(function () { form.classList.add('gone'); }, 450); return; }
+
+    const heavyLeft = Math.random() < 0.5;
+    const dir = heavyLeft ? -1 : 1;            // rotation sign that lowers the heavy end
+    form.style.transformOrigin = heavyLeft ? '100% 50%' : '0% 50%';
+    const L = Math.max(200, form.getBoundingClientRect().width);
+    const g = 2400;                            // px/s², same as the glass shards
+    const slipAt = 0.32 + Math.random() * 0.18; // radians of swing before it slips free
+    const SAG_MS = 240, SAG = 0.03;            // it gives a little before it goes
+    let theta = 0, omega = 0, x = 0, y = 0, vx = 0, vy = 0, free = false, last = 0;
+    const start = performance.now();
+
+    (function step(now) {
+      const dt = last ? Math.min(now - last, 50) / 1000 : 0;
+      last = now;
+      const held = now - start;
+      if (held < SAG_MS) {
+        const u = held / SAG_MS;
+        theta = SAG * u * u * (3 - 2 * u);
+      } else if (!free) {
+        // A bar pivoting on one end: angular acceleration 3g cos(θ) / 2L,
+        // a little slower for friction at the pivot.
+        omega += 0.75 * 1.5 * g / L * Math.cos(theta) * dt;
+        theta += omega * dt;
+        if (theta >= slipAt) {
+          free = true;
+          // It leaves the pivot with the speed its middle had, plus a little sideways kick.
+          vy = omega * L / 2 * Math.cos(theta);
+          vx = -dir * omega * L / 2 * Math.sin(theta) * 0.6;
+          omega *= 0.55;
+        }
+      } else {
+        vy += g * dt;
+        x += vx * dt; y += vy * dt;
+        theta += omega * dt;
+      }
+      form.style.transform = 'translate(' + x.toFixed(1) + 'px,' + y.toFixed(1) + 'px) rotate(' + (dir * theta).toFixed(4) + 'rad)';
+      if (y < window.innerHeight + L) requestAnimationFrame(step);
+      else form.classList.add('gone');
+    })(performance.now());
   }
 
   function loop(now) {

@@ -162,9 +162,10 @@ a { color: inherit; }
   80% { transform: translate(1px, -1px); }
 }
 
-/* When the screen is gone, the composer drops away too. */
-.composer-wrap { transition: transform 1.1s cubic-bezier(0.55, 0, 0.8, 0.3), opacity 1.1s ease-in; }
-body.shattered .composer-wrap { transform: translateY(70vh) rotate(5deg); opacity: 0; pointer-events: none; visibility: visible; }
+/* Once half the glass is going, the input bar drops too. main.js moves it. */
+.composer-wrap.falling { pointer-events: none; will-change: transform; }
+body.shattered .composer-wrap.falling { visibility: visible; }
+.composer-wrap.gone, body.shattered .composer-wrap.gone { visibility: hidden; }
 body.shattered .app { visibility: hidden; }
 
 @media (max-width: 600px) {
@@ -175,5 +176,5 @@ body.shattered .app { visibility: hidden; }
 @media (prefers-reduced-motion: reduce) {
   .app.jolt, .app.jolt-small { animation: none; }
   .composer-wrap { transition: opacity 0.4s linear; }
-  body.shattered .composer-wrap { transform: none; }
+  .composer-wrap.falling { opacity: 0; }
 }

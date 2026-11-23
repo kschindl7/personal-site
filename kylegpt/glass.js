@@ -618,6 +618,8 @@
     this.onCrack = opts.onCrack || function () {};
     this.onShatter = opts.onShatter || function () {};
     this.onShattered = opts.onShattered || function () {};
+    this.onHalf = opts.onHalf || function () {}; // half the glass has started to fall
+    this.halfDone = false;
     this.seed = opts.seed || (Math.random() * 1e9) | 0;
     this.geo = null;
     this.focus = { x: 0, y: 0 };
@@ -675,6 +677,7 @@
     this.fallen = new Uint8Array(this.geo.S.n + 1);
     this.next = 0;
     this.anyFallen = false;
+    this.fallenArea = 0;
     this.bruised = false;
     this.sprites = [];
     if (this.shattered) this.fillAll();
@@ -842,6 +845,8 @@
     cc.globalCompositeOperation = 'source-over';
     if (rimN) cc.drawImage(toCanvas(rim), X, Y, W, H);
     fallen[L] = 1;
+    this.fallenArea += S.area[L];
+    if (!this.halfDone && this.fallenArea >= 0.5 * GW * GH) { this.halfDone = true; this.onHalf(); }
     this.anyFallen = true;
 
     if (sprite) {
