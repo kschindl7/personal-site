@@ -66,7 +66,7 @@
     sideRight = sidebar && sidebar.offsetParent ? sidebar.getBoundingClientRect().right : 0;
     // The impact lands just above the input box, around the middle of it.
     const r = form.getBoundingClientRect();
-    glass.setFocus(r.left + r.width / 2, r.top - 30);
+    glass.setFocus(r.left + r.width / 2, r.top - 30, r.width);
   }
 
   function jolt(kind) {
@@ -90,8 +90,9 @@
   }
 
   // The input bar loses its support once half the glass is going. One end is
-  // heavier, so it swings down around the other end first, then slips free
-  // and falls, still turning.
+  // heavier, so it swings down around the other end, then slips off and
+  // falls. It is treated as one rigid bar throughout: when it slips it keeps
+  // exactly the speed and spin it had, then gravity speeds it up.
   let barDropping = false;
   function dropBar() {
     if (barDropping) return;
@@ -100,44 +101,68 @@
     form.classList.add('falling');
     if (reduced) { setTimeout(function () { form.classList.add('gone'); }, 450); return; }
 
+    const rect = form.getBoundingClientRect();
+    const len = Math.max(200, rect.width);
     const heavyLeft = Math.random() < 0.5;
-    const dir = heavyLeft ? -1 : 1;            // rotation sign that lowers the heavy end
-    form.style.transformOrigin = heavyLeft ? '100% 50%' : '0% 50%';
-    const L = Math.max(200, form.getBoundingClientRect().width);
-    const g = 2400;                            // px/s², same as the glass shards
-    const slipAt = 0.32 + Math.random() * 0.18; // radians of swing before it slips free
-    const SAG_MS = 240, SAG = 0.03;            // it gives a little before it goes
-    let theta = 0, omega = 0, x = 0, y = 0, vx = 0, vy = 0, free = false, last = 0;
+    const dir = heavyLeft ? -1 : 1;              // rotation sign that lowers the heavy end
+    const arm = heavyLeft ? -len / 2 : len / 2;  // middle of the bar, measured from the pivot
+    const g = 2400;                              // px/s², same as the glass shards
+    const friction = 0.6 + Math.random() * 0.3;  // the pivot drags a little
+    const slipAt = 0.28 + Math.random() * 0.22;  // radians of swing before it slips
+    const sagMs = 180 + Math.random() * 160, sag = 0.02 + Math.random() * 0.02;
+
+    // Everything is tracked for the middle of the bar, relative to where it started.
+    form.style.transformOrigin = '50% 50%';
+    let phi = 0, omega = 0;                      // swing angle and speed (rad, rad/s)
+    let cx = 0, cy = 0, vx = 0, vy = 0;          // middle, once it is free
+    let free = false, last = 0;
     const start = performance.now();
 
+    function place() {
+      if (free) return { x: cx, y: cy };
+      // Still on the pivot: the middle moves on a circle around it.
+      const a = dir * phi;
+      return { x: arm * Math.cos(a) - arm, y: arm * Math.sin(a) };
+    }
+
     (function step(now) {
-      const dt = last ? Math.min(now - last, 50) / 1000 : 0;
+      let dt = last ? Math.min(now - last, 50) / 1000 : 0;
       last = now;
       const held = now - start;
-      if (held < SAG_MS) {
-        const u = held / SAG_MS;
-        theta = SAG * u * u * (3 - 2 * u);
-      } else if (!free) {
-        // A bar pivoting on one end: angular acceleration 3g cos(θ) / 2L,
-        // a little slower for friction at the pivot.
-        omega += 0.75 * 1.5 * g / L * Math.cos(theta) * dt;
-        theta += omega * dt;
-        if (theta >= slipAt) {
-          free = true;
-          // It leaves the pivot with the speed its middle had, plus a little sideways kick.
-          vy = omega * L / 2 * Math.cos(theta);
-          vx = -dir * omega * L / 2 * Math.sin(theta) * 0.6;
-          omega *= 0.55;
-        }
+      if (held < sagMs) {
+        const u = held / sagMs;
+        phi = sag * u * u * (3 - 2 * u);
+        omega = 0;
       } else {
-        vy += g * dt;
-        x += vx * dt; y += vy * dt;
-        theta += omega * dt;
+        // Small fixed steps keep the motion smooth whatever the frame rate.
+        while (dt > 0) {
+          const h = Math.min(dt, 1 / 120);
+          dt -= h;
+          if (!free) {
+            // Bar pivoting on one end: angular acceleration 3g cos(phi) / 2L.
+            omega += friction * 1.5 * g / len * Math.cos(phi) * h;
+            phi += omega * h;
+            if (phi >= slipAt) {
+              // Slip: the middle keeps the velocity it had on the circle.
+              const p = place(), a = dir * phi, w = dir * omega;
+              cx = p.x; cy = p.y;
+              vx = -arm * Math.sin(a) * w;
+              vy = arm * Math.cos(a) * w;
+              free = true;
+            }
+          } else {
+            cx += vx * h;
+            cy += vy * h + 0.5 * g * h * h;
+            vy += g * h;
+            phi += omega * h;                     // no torque once it is free
+          }
+        }
       }
-      form.style.transform = 'translate(' + x.toFixed(1) + 'px,' + y.toFixed(1) + 'px) rotate(' + (dir * theta).toFixed(4) + 'rad)';
-      if (y < window.innerHeight + L) requestAnimationFrame(step);
+      const p = place();
+      form.style.transform = 'translate(' + p.x.toFixed(2) + 'px,' + p.y.toFixed(2) + 'px) rotate(' + (dir * phi).toFixed(4) + 'rad)';
+      if (rect.top + p.y - len / 2 < window.innerHeight + 40) requestAnimationFrame(step);
       else form.classList.add('gone');
-    })(performance.now());
+    })(start);
   }
 
   function loop(now) {

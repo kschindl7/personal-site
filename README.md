@@ -17,7 +17,7 @@ There is no build step. Everything is plain HTML, CSS, and JavaScript, and all o
 - `kylegpt/matrix.js`: the green rain.
 - `kylegpt/style.css`: the chat layout.
 
-URL options for working on the effect: `?progress=0` shows the long crack fully formed, `?progress=0.4` (any value up to 1) jumps that far into the shatter, and `?seed=123` gives the same fracture every time. Visitors who prefer reduced motion get the cracks without the spreading, no falling shards, a still frame of the rain, and no screen jolt. The "Skip to plain résumé" link stays on screen the whole time, and old `/?view=page` links redirect to the plain page.
+URL options for working on the effect: `?progress=0` shows the long crack fully formed, `?progress=0.4` (any value up to 1) jumps that far into the shatter, and `?seed=123` gives the same fracture every time. Without a seed, every visit breaks differently: where the long crack runs and how it forks, where the impact lands, how many cracks burst out, how many later fractures follow and when, and how fast the glass comes apart. Visitors who prefer reduced motion get the cracks without the spreading, no falling shards, a still frame of the rain, and no screen jolt. The "Skip to plain résumé" link stays on screen the whole time, and old `/?view=page` links redirect to the plain page.
 
 ---
 

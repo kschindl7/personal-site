@@ -168,17 +168,18 @@
   // near the top-right, spreading both ways from a point near the middle.
   Builder.prototype.mainCrack = function () {
     const w = this.w, h = this.h, r = this.r;
-    const A = r() < 0.5 ? { x: this.U(-10, w * 0.1), y: h + 14 } : { x: -14, y: this.U(h * 0.85, h) };
-    const B = r() < 0.5 ? { x: this.U(w * 0.9, w + 10), y: -14 } : { x: w + 14, y: this.U(0, h * 0.15) };
+    // Each end lands somewhere along the edges near its corner.
+    const A = r() < 0.5 ? { x: this.U(-10, w * 0.22), y: h + 14 } : { x: -14, y: this.U(h * 0.74, h) };
+    const B = r() < 0.5 ? { x: this.U(w * 0.78, w + 10), y: -14 } : { x: w + 14, y: this.U(0, h * 0.26) };
     const L = dist(A, B), dx = (B.x - A.x) / L, dy = (B.y - A.y) / L;
     const nx = -dy, ny = dx;
     const waves = [
-      { amp: this.U(0.02, 0.05) * L * (r() < 0.5 ? -1 : 1), f: this.U(0.6, 1.3), ph: this.U(0, TAU) },
-      { amp: this.U(0.007, 0.018) * L, f: this.U(2, 3.6), ph: this.U(0, TAU) },
-      { amp: this.U(0.002, 0.005) * L, f: this.U(5, 9), ph: this.U(0, TAU) }
+      { amp: this.U(0.006, 0.07) * L * (r() < 0.5 ? -1 : 1), f: this.U(0.4, 1.6), ph: this.U(0, TAU) },
+      { amp: this.U(0.003, 0.022) * L, f: this.U(1.8, 4), ph: this.U(0, TAU) },
+      { amp: this.U(0.001, 0.006) * L, f: this.U(5, 11), ph: this.U(0, TAU) }
     ];
     const kinks = [];
-    for (let k = 0, n = 3 + Math.floor(r() * 4); k < n; k++) kinks.push({ u: this.U(0.05, 0.95), amt: this.U(3, 10) * (r() < 0.5 ? -1 : 1) });
+    for (let k = 0, n = 1 + Math.floor(r() * 8); k < n; k++) kinks.push({ u: this.U(0.05, 0.95), amt: this.U(2, 14) * (r() < 0.5 ? -1 : 1) });
     const N = Math.ceil(L / 5);
     const pts = [];
     let jit = 0;
@@ -194,9 +195,11 @@
     }
     const s = [0];
     for (let i = 1; i < pts.length; i++) s.push(s[i - 1] + dist(pts[i - 1], pts[i]));
-    const i0 = Math.floor(pts.length * this.U(0.4, 0.6));
-    const t = s.map(function (v) { const d = Math.abs(v - s[i0]); return d / 3.2 * (1 + d / 3000); });
-    const main = this.add({ phase: 0, kind: 'main', w: 1.7, alpha: 0.92, pts: pts, t: t, dangling: false });
+    // It can start anywhere along its length and run at its own speed.
+    const i0 = Math.floor(pts.length * this.U(0.2, 0.8));
+    const v = this.U(2.4, 4.4);
+    const t = s.map(function (q) { const d = Math.abs(q - s[i0]); return d / v * (1 + d / 3000); });
+    const main = this.add({ phase: 0, kind: 'main', w: this.U(1.45, 2.0), alpha: this.U(0.85, 0.96), pts: pts, t: t, dangling: false });
     for (let i = 1; i < pts.length; i++) this.mark(pts[i - 1].x, pts[i - 1].y, pts[i].x, pts[i].y, main.id);
 
     // Forks off the long crack: a few real branches and some short spurs.
@@ -213,9 +216,9 @@
         ignore: new Set([main.id]), ignoreUntil: 18
       });
     }
-    const nb = 3 + Math.floor(r() * 3);
-    for (let k = 0; k < nb; k++) fork(k === 0 ? this.U(260, 520) : this.U(40, 220), 1.15, 0.8, this.U(0.3, 0.75));
-    for (let k = 0, n = 6 + Math.floor(r() * 6); k < n; k++) fork(this.U(5, 18), 0.8, 0.55, this.U(0.5, 1.3));
+    const nb = 1 + Math.floor(r() * 6), long = r() < 0.35 ? 2 : r() < 0.8 ? 1 : 0;
+    for (let k = 0; k < nb; k++) fork(k < long ? this.U(220, 560) : this.U(30, 240), this.U(1, 1.3), 0.8, this.U(0.25, 0.85));
+    for (let k = 0, n = 3 + Math.floor(r() * 12); k < n; k++) fork(this.U(5, 20), 0.8, 0.55, this.U(0.5, 1.3));
     return main;
   };
 
@@ -480,18 +483,21 @@
     const r = B.r, n = S.n, cs2 = S.cs * S.cs;
     const fall = new Float32Array(n + 1).fill(Infinity);
     const hold = new Float32Array(n + 1);
+    const tempo = 0.8 + r() * 0.45;        // some breaks are quicker than others
+    const pause = 200 + r() * 320;          // how long the cracked glass hangs first
+    const holes = 0.3 + r() * 0.5;          // how often a later fracture opens its own hole
     for (let L = 1; L <= n; L++) {
       const size = Math.sqrt(S.area[L] * cs2);
-      hold[L] = (160 + r() * 420) * (0.5 + size / 120) * (S.edge[L] ? 1.35 : 1);
+      hold[L] = (160 + r() * 420) * (0.5 + size / 120) * (S.edge[L] ? 1.35 : 1) * tempo;
     }
     // The crushed center goes first, and some of the later fracture points
     // open holes of their own that grow and merge.
     const seeds = new Set();
     const g = Math.ceil(7 / S.cs);
     for (let oy = -g; oy <= g; oy++) for (let ox = -g; ox <= g; ox++) seeds.add(labelAt(S, impact.x + ox * S.cs, impact.y + oy * S.cs));
-    seeds.forEach(function (L) { fall[L] = S.freed[L] + 320 + r() * 160; });
+    seeds.forEach(function (L) { fall[L] = S.freed[L] + pause + r() * 160; });
     B.origins.forEach(function (o, k) {
-      if (k === 0 || r() > 0.55) return;
+      if (k === 0 || r() > holes) return;
       const L = labelAt(S, o.x, o.y);
       fall[L] = Math.min(fall[L], S.freed[L] + 500 + r() * 600);
     });
@@ -521,26 +527,32 @@
     const main = B.mainCrack();
 
     // The impact, just above the input box.
+    // The impact lands anywhere along the input box, a little above it.
+    const fw = focus.w || 300;
     const O = {
-      x: Math.min(w - 20, Math.max(20, focus.x + B.U(-40, 40))),
-      y: Math.min(h - 20, Math.max(20, focus.y + B.U(-12, 8)))
+      x: Math.min(w - 20, Math.max(20, focus.x + B.U(-0.42, 0.42) * fw)),
+      y: Math.min(h - 20, Math.max(20, focus.y + B.U(-60, 12)))
     };
     B.origins.push({ x: O.x, y: O.y, t: 0 });
-    const first = B.radials(O, 0, 10 + Math.floor(B.r() * 6), {
-      onCrack: -1, speed: [2.2, 3.0], w: 1.3, dieP: 0.12, stop: 0.55, fork: [110, 230]
+    const forkA = B.U(80, 150);
+    const first = B.radials(O, 0, 8 + Math.floor(B.r() * 10), {
+      onCrack: -1, speed: [B.U(1.9, 2.4), B.U(2.6, 3.3)], w: B.U(1.15, 1.45), dieP: B.U(0.05, 0.22),
+      stop: B.U(0.4, 0.8), fork: [forkA, forkA + B.U(80, 180)]
     });
-    B.rings(O, first, { r0: B.U(8, 14), f: [1.18, 1.42], density: 1, maxChord: 300 });
+    B.rings(O, first, { r0: B.U(6, 18), f: [B.U(1.12, 1.28), B.U(1.32, 1.6)], density: B.U(0.8, 1), maxChord: B.U(240, 340) });
     B.splinters(O);
 
     // The cascade: new fractures start from the long crack and from other
     // cracks, each a little later and farther from the ones before.
-    const p2 = B.farthest(B.samplePoints(80, function (c) { return c.id === main.id; }));
-    if (p2) B.cascade(p2, B.U(850, 1250), p2.id);
-    const later = [B.U(1800, 2400), B.U(2800, 3400)];
-    later.forEach(function (t0) {
-      const p = B.farthest(B.samplePoints(220, function (c) { return c.kind !== 'splinter'; }));
+    // How many, and when, changes every time.
+    let t0 = B.U(650, 1300);
+    for (let k = 0, n = 1 + Math.floor(B.r() * 4); k < n; k++) {
+      const onMain = k === 0 && B.r() < 0.7;
+      const p = B.farthest(onMain ? B.samplePoints(80, function (c) { return c.id === main.id; })
+        : B.samplePoints(220, function (c) { return c.kind !== 'splinter'; }));
       if (p) B.cascade(p, t0, p.id);
-    });
+      t0 += B.U(550, 1300);
+    }
 
     const cs = Math.max(1, Math.sqrt(w * h / 2.4e6));
     let S = raster(B, cs);
@@ -641,9 +653,9 @@
     this.dirty = true;
   };
 
-  Glass.prototype.setFocus = function (x, y) {
+  Glass.prototype.setFocus = function (x, y, w) {
     if (!this.tCrack && (Math.abs(x - this.focus.x) > 1 || Math.abs(y - this.focus.y) > 1)) this.geo = null;
-    this.focus = { x: x, y: y };
+    this.focus = { x: x, y: y, w: w || 0 };
   };
 
   // Builds the fracture ahead of time so the first crack doesn't stall.
@@ -853,13 +865,18 @@
       const O = g.impact, size = Math.sqrt(areaPx);
       const cx = (bx + bw / 2) * cs, cy = (by + bh / 2) * cs;
       const dd = Math.hypot(cx - O.x, cy - O.y) || 1, r = g.r;
-      const out = (15 + r() * 55) * (size < 60 ? 1 : 0.4);
+      // Only pieces near the impact, in the first moments, get a push from the
+      // blow. Everything else simply loses its support and starts from rest.
+      const pop = Math.exp(-dd / 260) * Math.max(0, 1 - g.fall[L] / 900) * (40 + r() * 90) / (1 + size / 120);
       this.sprites.push({
         tex: toCanvas(tex), w: bw * cs, h: bh * cs,
-        x: cx, y: cy, vx: (cx - O.x) / dd * out + (r() - 0.5) * 30, vy: size > 120 ? r() * 20 : -60 + r() * 80,
-        z: 0, vz: 0.35 + r() * 0.5 + 12 / (size + 12),
-        axis: r() * Math.PI, tilt: 0, vt: (1.2 + r() * 3.4) / (1 + size / 140) * (r() < 0.5 ? -1 : 1),
-        rot: 0, vr: (r() - 0.5) * 2.2 / (1 + size / 180),
+        x: cx, y: cy,
+        vx: (cx - O.x) / dd * pop + (r() - 0.5) * 8, vy: -pop * (0.2 + r() * 0.5),
+        // Falling away from the viewer, slowly at first.
+        z: 0, vz: pop / 400 + r() * 0.04, az: 0.5 + r() * 1.1 + 6 / (size + 20),
+        // Tilt and spin build up as the piece tips off its last edge.
+        axis: r() * Math.PI, tilt: 0, vtMax: (1.0 + r() * 3.0) / (1 + size / 140) * (r() < 0.5 ? -1 : 1),
+        rot: 0, vrMax: (r() - 0.5) * 2.0 / (1 + size / 180), spin: 0.25 + r() * 0.35,
         glint: r() * TAU, age: 0
       });
       // A sprite dropped late (after a resize or a jump) starts partway through.
@@ -875,12 +892,23 @@
     this.cctx.clearRect(0, 0, this.crackCanvas.width, this.crackCanvas.height);
   };
 
+  // Exact steps for constant acceleration, so the motion is the same at any
+  // frame rate. Long gaps are split up so a late shard lands where it should.
   Glass.prototype.stepSprite = function (s, dt) {
-    s.age += dt;
-    s.vy += GRAVITY * dt;
-    s.x += s.vx * dt; s.y += s.vy * dt;
-    s.z += s.vz * dt;
-    s.tilt += s.vt * dt; s.rot += s.vr * dt;
+    while (dt > 0) {
+      const h = Math.min(dt, 1 / 60);
+      dt -= h;
+      s.x += s.vx * h;
+      s.y += s.vy * h + 0.5 * GRAVITY * h * h;
+      s.vy += GRAVITY * h;
+      s.z += s.vz * h + 0.5 * s.az * h * h;
+      s.vz += s.az * h;
+      // Angular speed eases up from zero over the first fraction of a second.
+      const u = Math.min(1, (s.age + h / 2) / s.spin), ramp = u * u * (3 - 2 * u);
+      s.tilt += s.vtMax * ramp * h;
+      s.rot += s.vrMax * ramp * h;
+      s.age += h;
+    }
   };
 
   Glass.prototype.drawHole = function (now) {
