@@ -83,12 +83,34 @@
   <canvas id="glass-hole" class="fx" aria-hidden="true"></canvas>
   <canvas id="glass-crack" class="fx" aria-hidden="true"></canvas>
 
+  <!-- Forms out of the rain once the screen is gone (kylegpt/menu.js). -->
+  <nav class="rain-menu" id="rain-menu" aria-label="Sections" hidden>
+    <div class="rain-shade" aria-hidden="true"></div>
+    <p class="rain-head" aria-hidden="true">kyle/</p>
+    <a href="tavern/?view=page#about" data-section="about">about</a>
+    <a href="tavern/?view=page#work" data-section="work">work</a>
+    <a href="tavern/?view=page#interests" data-section="interests">interests</a>
+    <a href="tavern/?view=page#other" data-section="other">other</a>
+    <a href="tavern/?view=page">résumé</a>
+  </nav>
+
+  <div class="rain-veil" id="rain-veil" hidden></div>
+  <section class="rain-panel" id="rain-panel" role="dialog" aria-modal="true" aria-labelledby="rain-path" hidden>
+    <header class="rain-panel-head">
+      <p class="rain-path" id="rain-path">kyle/</p>
+      <button type="button" class="rain-back">Back</button>
+    </header>
+    <div class="rain-panel-body"></div>
+    <p class="rain-panel-foot"><a class="rain-plain" href="tavern/?view=page">Open this as a plain page</a></p>
+  </section>
+
   <button type="button" class="reset-btn" id="reset" hidden>Put the glass back</button>
 
   <noscript><p class="noscript">KyleGPT needs JavaScript. <a href="tavern/?view=page">Read the plain résumé</a> instead.</p></noscript>
 
   <script src="kylegpt/matrix.js"></script>
   <script src="kylegpt/glass.js"></script>
+  <script src="kylegpt/menu.js"></script>
   <script src="kylegpt/main.js"></script>
 </body>
 </html>

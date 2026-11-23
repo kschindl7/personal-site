@@ -6,6 +6,7 @@
  *   ?progress=0      the long crack, fully formed
  *   ?progress=0.4    jump that far (0 to 1) into the shatter
  *   ?seed=123        the same fracture every time
+ *   ?view=menu       skip straight to the menu that forms in the rain
  */
 (function () {
   'use strict';
@@ -51,8 +52,18 @@
     onShattered: function () {
       document.body.classList.add('shattered');
       input.blur();
+      // Let the rain run on its own for a moment, then the menu forms out of it.
+      setTimeout(function () { menu.start(); }, reduced ? 0 : 700);
       setTimeout(function () { resetBtn.hidden = false; }, 1400);
     }
+  });
+
+  const menu = new Menu({
+    matrix: matrix,
+    nav: $('rain-menu'),
+    panel: $('rain-panel'),
+    veil: $('rain-veil'),
+    reduced: reduced
   });
 
   let typed = 0;          // characters typed in total; deleting does not undo damage
@@ -63,6 +74,7 @@
   function size() {
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     glass.resize(window.innerWidth, window.innerHeight, dpr);
+    menu.resize();
     sideRight = sidebar && sidebar.offsetParent ? sidebar.getBoundingClientRect().right : 0;
     // The impact lands just above the input box, around the middle of it.
     const r = form.getBoundingClientRect();
@@ -226,7 +238,8 @@
   window.addEventListener('resize', size);
   size();
 
-  const q = parseFloat(params.get('progress'));
+  // ?view=menu skips straight to the menu, for working on it.
+  const q = params.get('view') === 'menu' ? 1 : parseFloat(params.get('progress'));
   if (q >= 0) {
     const now = performance.now();
     crackedAt = now - 5000;
