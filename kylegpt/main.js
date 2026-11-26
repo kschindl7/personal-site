@@ -61,8 +61,7 @@
   const menu = new Menu({
     matrix: matrix,
     nav: $('rain-menu'),
-    panel: $('rain-panel'),
-    veil: $('rain-veil'),
+    page: $('rain-page'),
     reduced: reduced
   });
 
@@ -239,7 +238,9 @@
   size();
 
   // ?view=menu skips straight to the menu, for working on it.
-  const q = params.get('view') === 'menu' ? 1 : parseFloat(params.get('progress'));
+  // A link straight to a section (#work) skips the intro too.
+  const toSection = /^#[a-z]+$/.test(location.hash) && document.querySelector('.rain-menu a[data-section="' + location.hash.slice(1) + '"]');
+  const q = params.get('view') === 'menu' || toSection ? 1 : parseFloat(params.get('progress'));
   if (q >= 0) {
     const now = performance.now();
     crackedAt = now - 5000;

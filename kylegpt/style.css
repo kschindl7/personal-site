@@ -188,8 +188,6 @@ body.shattered .app { visibility: hidden; }
   --rain-text: #c9f8d7;
   --rain-dim: #6fae84;
   --rain-flash: #f4fff6;
-  --panel-bg: rgba(4, 11, 7, 0.95);
-  --panel-line: rgba(31, 209, 106, 0.26);
   --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 }
 
@@ -214,63 +212,96 @@ body.shattered .app { visibility: hidden; }
 }
 .rain-menu a:focus-visible { outline: none; }
 .rain-menu a:focus-visible::before { outline: 1px solid rgba(160, 255, 190, 0.7); }
-.rain-menu.chosen a:not(.picked), .rain-menu.chosen .rain-head { opacity: 0.18; }
+.rain-menu.chosen a:not(.picked) { opacity: 0; transition: opacity 0.45s ease-in; }
 .rain-menu.chosen a.picked::before { outline: none; }
+.rain-menu.away { visibility: hidden; }
+/* Letters scale from their top-left corner when they fly up into a heading. */
+.rain-l { transform-origin: 0 0; }
+.rain-l.flown { opacity: 0; }
 
-/* A section pours down into a panel over the dimmed rain. */
-.rain-veil { position: fixed; inset: 0; z-index: 6; background: rgba(0, 0, 0, 0.6); }
-.rain-panel {
-  position: fixed; z-index: 7; left: 50%; top: 50%;
-  transform: translate(-50%, -50%);
-  width: min(680px, calc(100vw - 32px));
-  max-height: min(82vh, 780px); max-height: min(82dvh, 780px);
-  overflow: auto;
-  padding: 0 28px 22px;
-  background: var(--panel-bg);
-  border: 1px solid var(--panel-line);
-  border-radius: 8px;
-  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.7);
+/* ---------------------------------------------------------------------------
+   A section, in a clear column the rain parts around (kylegpt/section.js).
+   Text keeps a comfortable measure; media can use the column's full width.
+   Media is optional: a section can be all text.
+   --------------------------------------------------------------------------- */
+.rain-page {
+  position: fixed; z-index: 4; top: 0; bottom: 0; left: 50%;
+  width: min(820px, calc(100vw - 32px));
+  transform: translateX(-50%);
+  overflow-y: auto; overscroll-behavior: contain;
+  padding: 0 32px 56px;
   color: #e1ebe4;
-  line-height: 1.6;
+  line-height: 1.65;
+  scrollbar-color: rgba(31, 209, 106, 0.35) transparent;
 }
-.rain-panel.pour { animation: pour 0.55s cubic-bezier(0.2, 0.7, 0.2, 1); }
-@keyframes pour {
-  from { clip-path: inset(0 0 100% 0 round 8px); }
-  to { clip-path: inset(0 0 0 0 round 8px); }
+.rain-page:focus { outline: none; }
+.rain-page-head {
+  position: sticky; top: 0; z-index: 1;
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  padding: 28px 0 18px;
+  background: linear-gradient(#000 78%, rgba(0, 0, 0, 0));
 }
-.rain-panel-head {
-  position: sticky; top: 0;
-  display: flex; align-items: center; justify-content: space-between; gap: 12px;
-  padding: 16px 0 12px;
-  background: var(--panel-bg);
-  border-bottom: 1px solid var(--panel-line);
-}
-.rain-path { margin: 0; font-family: var(--mono); font-size: 14px; color: var(--rain); }
+.rain-title { margin: 0; font: 500 28px/1 var(--mono); color: var(--rain-flash); white-space: nowrap; }
+.rain-title:focus { outline: none; }
+.rain-title .tl { display: inline-block; line-height: 1; }
+.rain-crumb { color: var(--rain-dim); }
+.rain-page.entering .tl { opacity: 0; }
+.rain-page.entering .rain-page-body, .rain-page.entering .rain-page-foot { visibility: hidden; }
 .rain-back {
+  flex: none;
   min-height: 40px; padding: 8px 16px;
   border: 1px solid rgba(31, 209, 106, 0.4); border-radius: 999px;
-  background: none; color: var(--rain-text);
+  background: #000; color: var(--rain-text);
   font: 14px var(--mono); cursor: pointer;
 }
 .rain-back:hover { background: rgba(31, 209, 106, 0.12); }
 .rain-back:focus-visible { outline: 2px solid #9dffc0; outline-offset: 2px; }
-.rain-panel-body h2 { margin: 22px 0 12px; font: 500 24px/1.3 var(--mono); color: #effff3; letter-spacing: -0.01em; }
-.rain-panel-body h3 { margin: 22px 0 2px; font-size: 16px; font-weight: 600; color: #f1f6f2; }
-.rain-panel-body p, .rain-panel-body ul { margin: 0 0 12px; }
-.rain-panel-body ul { padding-left: 20px; }
-.rain-panel-body li { margin-bottom: 6px; }
-.rain-panel-body .dates { margin: 0 0 8px; font-size: 14px; color: #8db398; }
-.rain-panel-body strong { color: #f1f6f2; font-weight: 600; }
-.rain-panel a { color: #8ff0b0; }
-.rain-panel a:focus-visible { outline: 2px solid #9dffc0; outline-offset: 2px; border-radius: 2px; }
-.rain-panel-foot { margin: 18px 0 0; padding-top: 14px; border-top: 1px solid var(--panel-line); font-size: 14px; }
+
+.rain-page-body > * { max-width: 100%; }
+.rain-page-body p, .rain-page-body ul, .rain-page-body ol { max-width: 68ch; margin: 0 0 14px; }
+.rain-page-body ul, .rain-page-body ol { padding-left: 20px; }
+.rain-page-body li { margin-bottom: 6px; }
+.rain-page-body h2 { margin: 8px 0 16px; font: 500 22px/1.3 var(--mono); color: #effff3; }
+.rain-page-body h3 { margin: 30px 0 4px; font: 600 16px/1.4 var(--mono); color: #f1f6f2; }
+.rain-page-body h4 { margin: 22px 0 4px; font: 600 14px/1.4 var(--mono); color: #d8eadd; }
+.rain-page-body .dates { margin: 0 0 10px; font: 13px/1.5 var(--mono); color: #8db398; }
+.rain-page-body strong { color: #f1f6f2; font-weight: 600; }
+.rain-page a { color: #8ff0b0; }
+.rain-page a:focus-visible { outline: 2px solid #9dffc0; outline-offset: 2px; border-radius: 2px; }
+.rain-page-foot { margin: 32px 0 0; padding-top: 14px; border-top: 1px solid rgba(31, 209, 106, 0.22); font-size: 14px; }
+
+/* Media, wherever a section has any. */
+.rain-page-body figure { margin: 26px 0; }
+.rain-page-body figcaption { margin-top: 8px; font: 13px/1.5 var(--mono); color: var(--rain-dim); }
+.rain-media { position: relative; margin: 20px 0; background: #050806; border-radius: 4px; overflow: hidden; }
+figure > .rain-media { margin: 0; }
+.rain-media > img, .rain-media > video, .rain-media > canvas:not([aria-hidden]), .rain-media > svg {
+  display: block; width: 100%; height: auto;
+}
+.rain-media.embed { aspect-ratio: 16 / 9; }
+.rain-media.embed > iframe { display: block; width: 100%; height: 100%; border: 0; }
+.rain-media > canvas[aria-hidden] { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.rain-wait { opacity: 0; }
+
+/* Blocks fall gently into place, one after another. */
+.rain-in { animation: rain-in 0.5s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+@keyframes rain-in {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: none; }
+}
+.rain-page.leaving .rain-page-body, .rain-page.leaving .rain-page-foot, .rain-page.leaving .rain-back {
+  opacity: 0; transition: opacity 0.16s ease-in;
+}
+body.section-open .skip-pill, body.section-open .reset-btn { display: none; }
 
 @media (max-width: 600px) {
-  .rain-panel { padding: 0 18px 18px; }
-  .rain-panel-body h2 { font-size: 21px; }
+  .rain-page { width: 100vw; padding: 0 18px 40px; }
+  .rain-page-head { padding-top: 18px; }
+  .rain-title { font-size: 22px; }
+  .rain-page-body h2 { font-size: 20px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .rain-l.on.set, .rain-menu a { transition: none; }
-  .rain-panel.pour { animation: none; }
+  .rain-l.on.set, .rain-menu a, .rain-menu.chosen a:not(.picked) { transition: none; }
+  .rain-in { animation: none; }
 }

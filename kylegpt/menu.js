@@ -7,8 +7,12 @@
  * on the rain's grid. A letter shows when a rain head runs through its cell
  * (see Matrix.setTargets), so the words condense out of the rain.
  *
- * Choosing a section drops its letters, then pours the section into a panel.
- * The section text is read from tavern/index.html, the one place it lives.
+ * Choosing a section: the other words fall away, the chosen word and kyle/
+ * fly up to become the section's heading, and the rain parts to leave a
+ * clear column where the section arrives (section.js). Back reverses it.
+ * Each section gets its own address (#work), so the browser's back button
+ * and direct links work. The text is read from tavern/index.html, the one
+ * place it lives.
  */
 (function () {
   'use strict';
@@ -18,9 +22,11 @@
   function Menu(opts) {
     this.matrix = opts.matrix;
     this.nav = opts.nav;
-    this.panel = opts.panel;
-    this.veil = opts.veil;
+    this.page = opts.page;               // the <article> a section shows in
+    this.section = new Section({ el: opts.page, reduced: opts.reduced });
     this.reduced = opts.reduced;
+    this.openName = null;
+    this.pending = null;                 // a section to open once content loads
     this.started = false;
     this.busy = false;
     this.picked = null;
@@ -55,12 +61,19 @@
       const a = e.target.closest('a[data-section]');
       if (!a || !self.content) return; // no content loaded: just follow the link
       e.preventDefault();
-      self.open(a);
+      self.open(a, { push: true });
     });
-    this.panel.querySelector('.rain-back').addEventListener('click', function () { self.close(); });
-    this.veil.addEventListener('click', function () { self.close(); });
+    this.page.querySelector('.rain-back').addEventListener('click', function () { self.back(); });
     document.addEventListener('keydown', function (e) {
-      if (e.key === 'Escape' && !self.panel.hidden) self.close();
+      if (e.key === 'Escape' && self.openName) self.back();
+    });
+    // The browser's back and forward buttons move between the menu and sections.
+    window.addEventListener('popstate', function () {
+      const name = self.fromHash();
+      if (name && name !== self.openName) {
+        if (self.openName) self.close({ quick: true });
+        self.open(self.link(name), {});
+      } else if (!name && self.openName) self.close({});
     });
   }
 
@@ -115,10 +128,16 @@
     this.layout();
     this.load();
     const self = this;
-    if (this.reduced) { this.targets.forEach(function (t) { t.locked = true; self.show(t, true); }); this.matrix.setTargets(this.targets); return; }
-    this.call(this.targets);
-    // Anything the rain hasn't reached in a few seconds just appears.
-    setTimeout(function () { self.lockAll(); }, 3500);
+    const name = this.fromHash();
+    if (this.reduced) {
+      this.targets.forEach(function (t) { t.locked = true; self.show(t, true); });
+      this.matrix.setTargets(this.targets);
+    } else {
+      this.call(this.targets);
+      // Anything the rain hasn't reached in a few seconds just appears.
+      setTimeout(function () { self.lockAll(); }, 3500);
+    }
+    if (name) this.openWhenReady(name);
   };
 
   // Send rain heads down every column that still has letters waiting.
@@ -131,10 +150,10 @@
     top.forEach(function (row, col) { m.summon(col, row); });
   };
 
-  Menu.prototype.lockAll = function () {
+  Menu.prototype.lockAll = function (still) {
     const self = this;
-    this.targets.forEach(function (t) { if (!t.locked) { t.locked = true; self.show(t); } });
-    this.matrix.setTargets(this.targets);
+    this.targets.forEach(function (t) { if (!t.locked) { t.locked = true; self.show(t, still); } });
+    if (!this.openName) this.matrix.setTargets(this.targets);
   };
 
   Menu.prototype.show = function (t, still) {
@@ -167,32 +186,124 @@
         out[sec.getAttribute('data-section')] = sec;
       });
       self.content = out;
+      if (self.pending) { const n = self.pending; self.pending = null; self.open(self.link(n), { quick: true }); }
     }).catch(function () { /* the links fall back to the plain page */ });
   };
 
-  Menu.prototype.open = function (a) {
-    if (this.busy) return;
+  Menu.prototype.link = function (name) {
+    return this.nav.querySelector('a[data-section="' + name + '"]');
+  };
+
+  Menu.prototype.fromHash = function () {
+    const name = decodeURIComponent(location.hash.slice(1));
+    return name && this.link(name) ? name : null;
+  };
+
+  // Arriving on a link to a section (#work): show it once the content loads.
+  Menu.prototype.openWhenReady = function (name) {
+    if (this.content) this.open(this.link(name), { quick: true });
+    else this.pending = name;
+  };
+
+  Menu.prototype.back = function () {
+    if (this.pushed) history.back(); // popstate closes it
+    else this.close({});
+  };
+
+  Menu.prototype.open = function (a, o) {
+    if (this.busy || !a) return;
     const name = a.getAttribute('data-section');
-    const sec = this.content[name];
+    const sec = this.content && this.content[name];
     if (!sec) { location.href = a.href; return; }
     this.busy = true;
-    this.picked = this.lines.find(function (l) { return l.el === a; });
+    this.openName = name;
+    if (o.push) { history.pushState({ kyle: name }, '', '#' + name); this.pushed = true; }
+    else this.pushed = !!(history.state && history.state.kyle === name); // came forward to it
+
+    const self = this;
+    const chosen = this.lines.find(function (l) { return l.el === a; });
+    const head = this.lines.find(function (l) { return l.head; });
+    this.picked = chosen;
     this.nav.classList.add('chosen');
     a.classList.add('picked');
+    this.nav.inert = true;
+    document.body.classList.add('section-open');
+    this.matrix.setTargets([]);  // the rain stops landing on the words
+
+    const S = this.section, lane = S.lane();
+    S.render(name, sec, a.getAttribute('href'));
+    this.page.hidden = false;
+    this.page.scrollTop = 0;
+
+    if (this.reduced || o.quick) {
+      this.matrix.setLane(lane.x0, lane.x1);
+      this.nav.classList.add('away');
+      this.lockAll(true);
+      S.reveal();
+      this.finishOpen();
+      return;
+    }
+
+    this.page.classList.add('entering');
+    this.lines.forEach(function (l) { if (l !== chosen && l !== head) self.drop(l); });
+    this.fly(head.letters, S.crumbLetters, 60);
+    this.fly(chosen.letters, S.nameLetters, 110);
+    this.part(lane, true, 480);
+    setTimeout(function () {
+      // The flying letters hand over to the real heading.
+      head.letters.concat(chosen.letters).forEach(function (t) { t.span.classList.add('flown'); });
+      S.reveal();
+      self.finishOpen();
+    }, 640);
+  };
+
+  Menu.prototype.finishOpen = function () {
+    this.busy = false;
+    this.page.querySelector('.rain-title').focus({ preventScroll: true });
+  };
+
+  // Letters glide from the menu row to their place in the heading.
+  Menu.prototype.fly = function (from, to, delay) {
+    const s = this.matrix.size;
+    from.forEach(function (t, i) {
+      const span = t.span;
+      span.style.transform = '';
+      const a = span.getBoundingClientRect(), b = to[i].getBoundingClientRect();
+      const k = b.height / s;
+      t.flight = span.animate([
+        { transform: 'translate(0, 0) scale(1)' },
+        { transform: 'translate(' + (b.left - a.left).toFixed(1) + 'px,' + (b.top - a.top).toFixed(1) + 'px) scale(' + k.toFixed(3) + ')' }
+      ], { duration: 520, delay: delay + i * 22, easing: 'cubic-bezier(0.65, 0, 0.25, 1)', fill: 'forwards' });
+    });
+  };
+
+  // The rain parts from the middle out (or closes back over).
+  Menu.prototype.part = function (lane, opening, dur) {
+    const m = this.matrix, mid = (lane.x0 + lane.x1) / 2, half = (lane.x1 - lane.x0) / 2;
+    const start = performance.now();
     const self = this;
-    if (this.reduced) { this.fill(name, sec, a); return; }
-    this.drop(this.picked);
-    setTimeout(function () { self.fill(name, sec, a); }, 420);
+    this.parting = start;
+    (function step(now) {
+      if (self.parting !== start) return;
+      let u = Math.min(1, (now - start) / dur);
+      u = opening ? 1 - Math.pow(1 - u, 3) : u * u * u;
+      const h = half * (opening ? u : 1 - u);
+      if (h < 1 && !opening) { m.setLane(null); return; }
+      m.setLane(mid - h, mid + h);
+      if (now - start < dur) requestAnimationFrame(step);
+      else if (!opening) m.setLane(null);
+    })(start);
   };
 
   // The chosen word's letters lose their hold and fall, each a moment apart.
   Menu.prototype.drop = function (line) {
     const g = 2400, start = performance.now();
     const parts = line.letters.map(function (t, i) {
-      return { t: t, delay: i * 30 + Math.random() * 50, vx: (Math.random() - 0.5) * 40, spin: (Math.random() - 0.5) * 6 };
+      return { t: t, delay: i * 30 + Math.random() * 80, vx: (Math.random() - 0.5) * 40, spin: (Math.random() - 0.5) * 6 };
     });
+    line.dropping = start;
     (function step(now) {
-      if (!line.letters[0].span.classList.contains('on')) return; // put back already
+      if (line.dropping !== start) return; // put back already
       let moving = false;
       parts.forEach(function (p) {
         const age = (now - start - p.delay) / 1000;
@@ -207,43 +318,61 @@
     })(start);
   };
 
-  Menu.prototype.fill = function (name, sec, a) {
-    const body = this.panel.querySelector('.rain-panel-body');
-    body.innerHTML = '';
-    Array.prototype.forEach.call(sec.children, function (el) { body.appendChild(el.cloneNode(true)); });
-    this.panel.querySelector('.rain-path').textContent = 'kyle/' + name;
-    this.panel.querySelector('.rain-plain').setAttribute('href', a.getAttribute('href'));
-    this.veil.hidden = false;
-    this.panel.hidden = false;
-    this.panel.classList.remove('pour');
-    void this.panel.offsetWidth;
-    if (!this.reduced) this.panel.classList.add('pour');
-    this.panel.scrollTop = 0;
-    this.panel.querySelector('.rain-back').focus({ preventScroll: true });
-  };
+  // Back to the menu: the heading flies back into the row, the rain closes
+  // over the column, and the other words form out of the rain again.
+  Menu.prototype.close = function (o) {
+    if (!this.openName) return;
+    const self = this, S = this.section;
+    const chosen = this.picked, head = this.lines.find(function (l) { return l.head; });
+    this.openName = null;
+    this.pushed = false;
+    if (location.hash && !o.quick && history.state === null) history.replaceState(null, '', location.pathname + location.search);
+    this.busy = true;
 
-  // Back to the menu: the chosen word condenses out of the rain again.
-  Menu.prototype.close = function () {
-    if (this.panel.hidden) return;
-    this.panel.hidden = true;
-    this.veil.hidden = true;
-    this.nav.classList.remove('chosen');
-    const line = this.picked;
-    this.busy = false;
-    this.picked = null;
-    if (!line) return;
-    line.el.classList.remove('picked');
-    if (this.reduced) { line.el.focus(); return; }
-    line.letters.forEach(function (t) {
-      t.locked = false;
-      t.span.classList.remove('on', 'set');
-      t.span.style.transform = '';
+    const finish = function () {
+      S.clear();
+      self.page.hidden = true;
+      self.page.classList.remove('leaving', 'entering');
+      self.nav.classList.remove('chosen', 'away');
+      self.nav.inert = false;
+      document.body.classList.remove('section-open');
+      if (chosen) chosen.el.classList.remove('picked');
+      self.lines.forEach(function (l) {
+        l.dropping = 0;
+        l.letters.forEach(function (t) {
+          if (t.flight) { t.flight.cancel(); t.flight = null; }
+          t.span.classList.remove('flown');
+        });
+      });
+      // Words that fell away form out of the rain again.
+      const again = [];
+      self.lines.forEach(function (l) {
+        if (l === chosen || l === head) return;
+        l.letters.forEach(function (t) {
+          t.span.style.transform = '';
+          if (self.reduced || o.quick) return;
+          t.locked = false;
+          t.span.classList.remove('on', 'set');
+          again.push(t);
+        });
+      });
+      self.matrix.setTargets(self.targets);
+      self.call(again);
+      if (again.length) setTimeout(function () { self.lockAll(); }, 2000);
+      self.busy = false;
+      self.picked = null;
+      if (chosen && !o.quick) chosen.el.focus({ preventScroll: true });
+    };
+
+    if (this.reduced || o.quick) { this.matrix.setLane(null); this.parting = 0; finish(); return; }
+
+    this.page.classList.add('leaving');
+    head.letters.concat(chosen ? chosen.letters : []).forEach(function (t) {
+      t.span.classList.remove('flown');
+      if (t.flight) t.flight.reverse();
     });
-    this.matrix.setTargets(this.targets);
-    this.call(line.letters);
-    const self = this;
-    setTimeout(function () { line.letters.forEach(function (t) { if (!t.locked) { t.locked = true; self.show(t); } }); self.matrix.setTargets(self.targets); }, 2500);
-    line.el.focus({ preventScroll: true });
+    this.part(S.lane(), false, 420);
+    setTimeout(finish, 600);
   };
 
   window.Menu = Menu;

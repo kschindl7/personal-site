@@ -350,6 +350,11 @@ html:not(.js) #content .back-to-inn { display: none; }
 #content h3 { margin: 16px 0 2px; font-size: 24px; font-weight: normal; color: var(--gold); }
 #content .dates { margin: 0; color: var(--muted); }
 #content ul { padding-left: 22px; }
+/* Images, video and embeds, wherever a section has any. */
+#content figure, #panel-body figure { margin: 16px 0; }
+#content figcaption, #panel-body figcaption { margin-top: 6px; color: var(--muted); }
+#content img, #content video, #panel-body img, #panel-body video { display: block; max-width: 100%; height: auto; }
+#content iframe, #panel-body iframe { display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; border: 0; }
 
 @media (prefers-reduced-motion: reduce) {
   .bubble, #title-card { transition: none; }

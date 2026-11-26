@@ -214,7 +214,7 @@
       }
     }
 
-    if (!this.cells) return;
+    if (!this.cells) { this.fillLane(); return; }
 
     // The pooled water shimmers and slowly drains away between hits.
     const self = this;
@@ -262,6 +262,30 @@
       if (this.fall(p.col, p.c) && p.c.row <= rows + 1) spills.push(p);
     }
     this.spills = spills;
+    this.fillLane();
+  };
+
+  // A clear column for a section's content: the rain parts around it. The
+  // streams along its edges run heavier, as if pushed aside. Pass null to
+  // let the rain back in.
+  Matrix.prototype.setLane = function (x0, x1) {
+    if (x0 == null) { this.lane = null; return; }
+    const first = !this.lane;
+    this.lane = { x0: x0, x1: x1 };
+    if (first && this.cols) {
+      const s = this.size, a = Math.floor(x0 / s) - 1, b = Math.ceil(x1 / s);
+      [a, a - 1, b, b + 1].forEach(function (i) {
+        const c = this.cols[i];
+        if (c) c.speed = 1.2 + Math.random() * 0.3;
+      }, this);
+    }
+    this.fillLane();
+  };
+
+  Matrix.prototype.fillLane = function () {
+    if (!this.lane) return;
+    this.ctx.fillStyle = '#000';
+    this.ctx.fillRect(this.lane.x0, 0, this.lane.x1 - this.lane.x0, this.h);
   };
 
   Matrix.prototype.update = function (now) {

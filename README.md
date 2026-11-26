@@ -1,6 +1,6 @@
 # KyleGPT
 
-Kyle's personal site. It opens on a chat page that looks like an AI assistant, titled KyleGPT. After a visitor types 5 characters, one long crack runs across the glass from near the bottom-left corner to near the top-right. At 10 characters the glass is hit just above the input box: radial cracks burst out, fork and stop where they meet other cracks, concentric cracks join them at staggered points, and later fractures start from the existing cracks. Shards of every shape and size fall away, showing green Matrix-style rain underneath until it fills the screen. Once half the glass is going, the input bar gives way too: one end is heavier, so it swings down around the other end, then slips free and falls. When the screen is gone, a menu forms in the rain, laid out in a row (wrapping on phones): each letter appears where a falling stream lands on it, spelling out `kyle/` and the sections. From then on the rain treats the words as solid: it splashes on the letters, pools along their tops, runs off the ends and pours down beside them, leaving the space under each word dry. Choosing a section drops its letters and pours that section into a panel over the rain.
+Kyle's personal site. It opens on a chat page that looks like an AI assistant, titled KyleGPT. After a visitor types 5 characters, one long crack runs across the glass from near the bottom-left corner to near the top-right. At 10 characters the glass is hit just above the input box: radial cracks burst out, fork and stop where they meet other cracks, concentric cracks join them at staggered points, and later fractures start from the existing cracks. Shards of every shape and size fall away, showing green Matrix-style rain underneath until it fills the screen. Once half the glass is going, the input bar gives way too: one end is heavier, so it swings down around the other end, then slips free and falls. When the screen is gone, a menu forms in the rain, laid out in a row (wrapping on phones): each letter appears where a falling stream lands on it, spelling out `kyle/` and the sections. From then on the rain treats the words as solid: it splashes on the letters, pools along their tops, runs off the ends and pours down beside them, leaving the space under each word dry. Choosing a section makes the other words fall away while the chosen word and `kyle/` fly up to become its heading. The rain parts to leave a clear column, headings and dates decode out of scrambled characters, and the rest of the section fades in. Any images or video dissolve out of a patch of rain as they scroll into view. Back reverses it. Each section has its own address (`#work`), so the browser's back button and direct links work.
 
 There is no build step. Everything is plain HTML, CSS, and JavaScript, and all of the effects are drawn in code.
 
@@ -15,10 +15,38 @@ There is no build step. Everything is plain HTML, CSS, and JavaScript, and all o
 - `kylegpt/main.js`: the chat page, the 5- and 10-character triggers, and the timing knobs in `CONFIG` at the top.
 - `kylegpt/glass.js`: builds the fracture (the long crack, the impact, the cascade), works out the shards from the regions the cracks enclose, and draws the cracks, the hole and the falling shards.
 - `kylegpt/matrix.js`: the green rain, including how it forms the menu's letters and then splashes on them, pools on top and spills off the ends.
-- `kylegpt/menu.js`: the menu that forms in the rain and the section panel. Its links in `index.html` point at the plain page, so they still work without JavaScript, and the panel reads each section from `tavern/index.html`, so the content still lives in one place.
+- `kylegpt/section.js`: a section's view: decoding text, fading blocks in, and revealing media.
+- `kylegpt/menu.js`: the menu that forms in the rain, and the transition into and out of a section. Its links in `index.html` point at the plain page, so they still work without JavaScript, and the panel reads each section from `tavern/index.html`, so the content still lives in one place.
 - `kylegpt/style.css`: the chat layout.
 
 URL options for working on the effect: `?progress=0` shows the long crack fully formed, `?progress=0.4` (any value up to 1) jumps that far into the shatter, `?seed=123` gives the same fracture every time, and `?view=menu` skips straight to the menu. Without a seed, every visit breaks differently: where the long crack runs and how it forks, where the impact lands, how many cracks burst out, how many later fractures follow and when, and how fast the glass comes apart. Visitors who prefer reduced motion get the cracks without the spreading, no falling shards, a still frame of the rain, and no screen jolt. The "Skip to plain résumé" link stays on screen the whole time, and old `/?view=page` links redirect to the plain page.
+
+### Adding images, video and animations
+
+Media is optional: a section can be all text. Where you want media, put it in that section (or a sub-section, such as a job or project) in `tavern/index.html`, and it shows on the plain page and in KyleGPT alike. Give images and videos their real `width` and `height` so the space is kept while they load.
+
+```html
+<!-- An image with a caption -->
+<figure>
+  <img src="media/project.jpg" width="1600" height="900" alt="What the image shows">
+  <figcaption>A short caption.</figcaption>
+</figure>
+
+<!-- A video people can play -->
+<video src="media/demo.mp4" controls width="1280" height="720"></video>
+
+<!-- An animation: a looping, muted clip. It plays only while on screen,
+     and not at all for visitors who prefer reduced motion. -->
+<video src="media/loop.mp4" autoplay muted loop playsinline width="1280" height="720"></video>
+
+<!-- An embed (YouTube, Vimeo, CodePen...) -->
+<iframe src="https://www.youtube-nocookie.com/embed/VIDEO_ID" width="1280" height="720" title="What the video is"></iframe>
+
+<!-- Anything else to reveal the same way (a canvas, an SVG...) -->
+<div data-media>...</div>
+```
+
+Paths are relative to `tavern/`, so a `media/` folder there works for both pages.
 
 ---
 
