@@ -93,15 +93,15 @@
     <a href="tavern/?view=page">résumé</a>
   </nav>
 
-  <div class="rain-veil" id="rain-veil" hidden></div>
-  <section class="rain-panel" id="rain-panel" role="dialog" aria-modal="true" aria-labelledby="rain-path" hidden>
-    <header class="rain-panel-head">
-      <p class="rain-path" id="rain-path">kyle/</p>
+  <!-- A section, in a clear column the rain parts around (kylegpt/section.js). -->
+  <article class="rain-page" id="rain-page" aria-labelledby="rain-title" hidden>
+    <header class="rain-page-head">
+      <h1 class="rain-title" id="rain-title" tabindex="-1"><span class="rain-crumb">kyle/</span><span class="rain-name"></span></h1>
       <button type="button" class="rain-back">Back</button>
     </header>
-    <div class="rain-panel-body"></div>
-    <p class="rain-panel-foot"><a class="rain-plain" href="tavern/?view=page">Open this as a plain page</a></p>
-  </section>
+    <div class="rain-page-body"></div>
+    <p class="rain-page-foot"><a class="rain-plain" href="tavern/?view=page">Open this as a plain page</a></p>
+  </article>
 
   <button type="button" class="reset-btn" id="reset" hidden>Put the glass back</button>
 
@@ -109,6 +109,7 @@
 
   <script src="kylegpt/matrix.js"></script>
   <script src="kylegpt/glass.js"></script>
+  <script src="kylegpt/section.js"></script>
   <script src="kylegpt/menu.js"></script>
   <script src="kylegpt/main.js"></script>
 </body>
