@@ -155,12 +155,10 @@ body.shattered .app { visibility: hidden; }
 .rain-head { color: var(--rain-dim); }
 .rain-menu a { pointer-events: auto; color: var(--rain-text); text-decoration: none; transition: opacity 0.3s; }
 
-/* Each letter waits invisibly until the rain reaches it, flashes, then settles.
-   Later drops make it glint for a moment as they land. */
+/* Each label letter waits invisibly until the rain reaches it, flashes, then settles. */
 .rain-l { position: absolute; top: 0; height: 100%; opacity: 0; }
 .rain-l.on { opacity: 1; color: var(--rain-flash); text-shadow: 0 0 6px #b9ffd0, 0 0 14px rgba(31, 209, 106, 0.8); }
 .rain-l.on.set { color: inherit; text-shadow: 0 0 8px rgba(31, 209, 106, 0.4); transition: color 0.7s ease-out, text-shadow 0.7s ease-out; }
-.rain-l.on.set.hit { color: #e9fff0; text-shadow: 0 0 6px rgba(185, 255, 208, 0.8); transition: none; }
 
 /* No box: a word lights up when pointed at. The hit area is still generous. */
 .rain-menu a::before { content: ""; position: absolute; inset: -16px -10px; border-radius: 4px; }

@@ -4,9 +4,8 @@
  * The links are ordinary <a> elements in index.html, each pointing at its
  * section of the plain page, so the menu still works without JavaScript and
  * for search engines. Each word is drawn as large lettering made of code
- * (codeword.js), brighter than the rain around it, and fills with falling
- * code to appear. The rain treats the letters as solid: it lands on them,
- * pools on top and spills off (see Matrix.setTargets). The small kyle/ label
+ * (codeword.js): glowing letters made of streaming code that stand in front
+ * of the rain, filling with falling code to appear. The small kyle/ label
  * above is set on the rain's own grid and condenses out of the rain.
  *
  * Choosing a section: the other words fall away, the chosen word and kyle/
@@ -69,15 +68,6 @@
     this.words = this.lines.filter(function (l) { return l.word; });
     this.headLine = this.lines.find(function (l) { return l.head; });
     this.matrix.onLock = function (t) { self.show(t); };
-    // Each drop that lands makes the code flare where it hit (or the small
-    // label's letter glint).
-    this.matrix.onHit = function (t) {
-      if (t.word) { t.word.flare((t.col + 0.5) * self.matrix.size); return; }
-      const span = t.span;
-      if (!span.classList.contains('set')) return;
-      span.classList.add('hit');
-      setTimeout(function () { span.classList.remove('hit'); }, 90);
-    };
     // The code lettering runs on its own frame loop.
     (function tick(now) {
       if (self.started) self.words.forEach(function (l) { l.word.frame(now); });
@@ -169,21 +159,6 @@
       targets.push(t);
     });
 
-    // Where the big letters are solid, for the rain to land on.
-    words.forEach(function (l) {
-      const w = l.word, cells = [];
-      const c0 = Math.floor((w.x) / s), c1 = Math.ceil((w.x + w.textW) / s);
-      const r0 = Math.floor((w.y) / s), r1 = Math.ceil((w.y + w.textH) / s);
-      for (let c = c0; c <= c1; c++) {
-        for (let r = r0; r <= r1; r++) {
-          if (w.coverage(c * s, r * s, s) > 0.4) cells.push({ col: c, row: r, locked: true, word: w });
-        }
-      }
-      let left = Infinity, right = -Infinity;
-      cells.forEach(function (t) { left = Math.min(left, t.col); right = Math.max(right, t.col); });
-      cells.forEach(function (t) { t.left = left; t.right = right; targets.push(t); });
-      l.cells = cells;
-    });
     m.setTargets(targets);
     this.targets = targets;
   };
@@ -212,11 +187,8 @@
   // Send rain heads down every column that still has letters waiting.
   Menu.prototype.call = function (targets) {
     const top = new Map();
-    // Streams for the label's letters, and a sprinkling over the big words
-    // so rain is seen pouring onto them as they fill.
     targets.forEach(function (t) {
-      const want = !t.locked || (t.word && Math.random() < 0.35);
-      if (want && (!top.has(t.col) || t.row < top.get(t.col))) top.set(t.col, t.row);
+      if (!t.locked && (!top.has(t.col) || t.row < top.get(t.col))) top.set(t.col, t.row);
     });
     const m = this.matrix;
     top.forEach(function (row, col) { m.summon(col, row); });
