@@ -12,13 +12,13 @@
  * fly up to become the section's heading, and the rain parts to leave a
  * clear column where the section arrives (section.js). Back reverses it.
  * Each section gets its own address (#work), so the browser's back button
- * and direct links work. The text is read from tavern/index.html, the one
+ * and direct links work. The text is read from resume/index.html, the one
  * place it lives.
  */
 (function () {
   'use strict';
 
-  const SOURCE = 'tavern/index.html';
+  const SOURCE = 'resume/index.html';
 
   function Menu(opts) {
     this.matrix = opts.matrix;
@@ -211,7 +211,7 @@
       // Swap the game's history entry for the page's, so Back returns to the menu.
       const a = this.link('other');
       this.closeRuns();
-      if (!this.content || !a) { location.href = a ? a.href : 'tavern/?view=page#other'; return; }
+      if (!this.content || !a) { location.href = a ? a.href : 'resume/#other'; return; }
       history.replaceState({ kyle: 'other' }, '', '#other');
       this.open(a, {});
       return;
