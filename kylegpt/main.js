@@ -244,7 +244,12 @@
     if (q > 0) { shatterTimer = -1; glass.shatter(now - Math.min(q, 1) * Glass.TOTAL_MS); }
   } else {
     // Work out the fracture while the visitor reads, so the first crack is instant.
-    (window.requestIdleCallback || function (f) { return setTimeout(f, 300); })(function () { glass.prepare(); });
+    (window.requestIdleCallback || function (f) { return setTimeout(f, 300); })(function () {
+      glass.prepare();
+      // A practice jolt that doesn't move: the browser does its first-time
+      // setup for moving the page now, rather than at the first real crack.
+      if (!reduced && app.animate) app.animate([{ transform: 'translate(0, 0)' }, { transform: 'translate(0, 0)' }], { duration: 30 });
+    });
   }
 
   requestAnimationFrame(loop);

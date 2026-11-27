@@ -29,8 +29,9 @@ a { color: inherit; }
 }
 
 /* Layers, bottom to top: app UI, Matrix seen through the hole, composer, crack lines, skip link. */
-/* will-change: the page gets its own layer up front, so the first jolt doesn't stall to make one. */
-.app { position: relative; display: flex; height: 100vh; height: 100dvh; will-change: transform; }
+/* No will-change here: it would make .app a stacking context, and the input
+   bar (inside it) could no longer sit above the hole as it falls. */
+.app { position: relative; display: flex; height: 100vh; height: 100dvh; }
 .fx { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; }
 #glass-hole, #glass-shards { z-index: 2; }
 #glass-crack { z-index: 4; }
