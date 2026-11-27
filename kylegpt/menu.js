@@ -3,9 +3,11 @@
  *
  * The links are ordinary <a> elements in index.html, each pointing at its
  * section of the plain page, so the menu still works without JavaScript and
- * for search engines. Here each link is split into letters and laid exactly
- * on the rain's grid. A letter shows when a rain head runs through its cell
- * (see Matrix.setTargets), so the words condense out of the rain.
+ * for search engines. Each word is drawn as large lettering made of code
+ * (codeword.js), brighter than the rain around it, and fills with falling
+ * code to appear. The rain treats the letters as solid: it lands on them,
+ * pools on top and spills off (see Matrix.setTargets). The small kyle/ label
+ * above is set on the rain's own grid and condenses out of the rain.
  *
  * Choosing a section: the other words fall away, the chosen word and kyle/
  * fly up to become the section's heading, and the rain parts to leave a
@@ -35,6 +37,22 @@
     const self = this;
     this.lines = Array.prototype.map.call(this.nav.querySelectorAll('.rain-head, a'), function (el) {
       const text = el.textContent.trim();
+      const head = el.classList.contains('rain-head');
+      if (!head) {
+        // The link keeps its text for screen readers and search; the code
+        // lettering is drawn over it.
+        el.textContent = '';
+        const label = document.createElement('span');
+        label.className = 'code-label';
+        label.textContent = text;
+        el.appendChild(label);
+        const word = new CodeWord(text, self.reduced);
+        el.appendChild(word.view);
+        const on = function () { word.hoverTo = 1; }, off = function () { word.hoverTo = 0; };
+        el.addEventListener('pointerenter', on); el.addEventListener('pointerleave', off);
+        el.addEventListener('focus', on); el.addEventListener('blur', off);
+        return { el: el, text: text, letters: [], word: word, head: false };
+      }
       el.textContent = '';
       el.setAttribute('aria-label', el.getAttribute('aria-label') || text);
       const letters = Array.prototype.map.call(text, function (ch) {
@@ -46,16 +64,25 @@
         return { span: span, col: 0, row: 0, locked: false };
       });
       letters.forEach(function (t) { t.line = el; });
-      return { el: el, text: text, letters: letters, head: el.classList.contains('rain-head') };
+      return { el: el, text: text, letters: letters, head: true };
     });
+    this.words = this.lines.filter(function (l) { return l.word; });
+    this.headLine = this.lines.find(function (l) { return l.head; });
     this.matrix.onLock = function (t) { self.show(t); };
-    // Each later drop that lands makes the letter glint for a moment.
+    // Each drop that lands makes the code flare where it hit (or the small
+    // label's letter glint).
     this.matrix.onHit = function (t) {
+      if (t.word) { t.word.flare((t.col + 0.5) * self.matrix.size); return; }
       const span = t.span;
       if (!span.classList.contains('set')) return;
       span.classList.add('hit');
       setTimeout(function () { span.classList.remove('hit'); }, 90);
     };
+    // The code lettering runs on its own frame loop.
+    (function tick(now) {
+      if (self.started) self.words.forEach(function (l) { l.word.frame(now); });
+      requestAnimationFrame(tick);
+    })(performance.now());
 
     this.nav.addEventListener('click', function (e) {
       const a = e.target.closest('a[data-section]');
@@ -77,45 +104,85 @@
     });
   }
 
-  // Lay the words out in a row on the rain's grid, wrapping onto more rows
-  // on narrow screens. Rows are far enough apart for rain to spill between.
+  // Size the words as large as fits, wrapping into centered rows, and line
+  // them up with the rain's grid. The small kyle/ label sits above them.
   Menu.prototype.layout = function () {
-    const m = this.matrix, s = m.size;
-    const cols = m.cols.length, rows = Math.floor(m.h / s);
-    const gap = 3;
-    const maxW = cols - 4;
-    const lines = [];
-    let cur = [], w = 0;
-    this.lines.forEach(function (l) {
-      const need = (cur.length ? gap : 0) + l.text.length;
-      if (cur.length && w + need > maxW) { lines.push({ items: cur, w: w }); cur = []; w = 0; }
-      w += (cur.length ? gap : 0) + l.text.length;
-      cur.push(l);
-    });
-    if (cur.length) lines.push({ items: cur, w: w });
-
-    const rowGap = Math.max(4, Math.ceil(72 / s));
-    const r0 = Math.max(3, Math.round(rows * 0.46 - (lines.length - 1) * rowGap / 2));
-    const targets = [];
-    lines.forEach(function (line, k) {
-      const row = r0 + k * rowGap;
-      let col = Math.max(2, Math.floor((cols - line.w) / 2));
-      line.items.forEach(function (l) {
-        const left = col, right = col + l.text.length - 1;
-        l.el.style.left = col * s + 'px';
-        l.el.style.top = row * s + 'px';
-        l.el.style.width = l.text.length * s + 'px';
-        l.el.style.height = s + 'px';
-        l.el.style.fontSize = s + 'px';
-        l.el.style.lineHeight = s + 'px';
-        l.letters.forEach(function (t, i) {
-          t.col = col + i; t.row = row; t.left = left; t.right = right;
-          t.span.style.left = i * s + 'px';
-          t.span.style.width = s + 'px';
-          targets.push(t);
-        });
-        col += l.text.length + gap;
+    const m = this.matrix, s = m.size, vw = m.w, vh = m.h;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const words = this.words;
+    const base = words.map(function (l) { return CodeWord.measure(l.text, 100); });
+    const margin = Math.max(20, vw * 0.07), avail = vw - margin * 2;
+    let size = Math.min(150, vh * 0.17), rows;
+    for (; size > 26; size -= 2) {
+      const gap = size * 0.5;
+      rows = [];
+      let cur = [], w = 0;
+      words.forEach(function (l, i) {
+        const wi = base[i] * size / 100;
+        if (cur.length && w + gap + wi > avail) { rows.push({ items: cur, w: w }); cur = []; w = 0; }
+        w += (cur.length ? gap : 0) + wi;
+        cur.push({ l: l, w: wi });
       });
+      rows.push({ items: cur, w: w });
+      const fits = rows.every(function (r) { return r.w <= avail; });
+      if (fits && rows.length * size * 1.45 <= vh * 0.62) break;
+    }
+    size = Math.round(size);
+    const lineH = Math.ceil(size * 1.45 / s) * s;
+    const gap = size * 0.5;
+    const top = Math.round((vh - rows.length * lineH) / 2 / s) * s + s;
+    let blockLeft = Infinity;
+    rows.forEach(function (row, k) {
+      let x = Math.round((vw - row.w) / 2 / s) * s;
+      blockLeft = Math.min(blockLeft, x);
+      row.items.forEach(function (it) {
+        const l = it.l;
+        l.box = { x: x, y: top + k * lineH, w: Math.ceil(it.w), h: size };
+        l.word.build(size, x, top + k * lineH, dpr);
+        x = Math.round((x + it.w + gap) / s) * s;
+      });
+    });
+
+    // The links cover the words, with room to spare for tapping.
+    words.forEach(function (l) {
+      const st = l.el.style;
+      st.left = l.box.x + 'px'; st.top = l.box.y + 'px';
+      st.width = l.box.w + 'px'; st.height = l.word.textH + 'px';
+      st.fontSize = '';
+      st.lineHeight = '';
+    });
+
+    // The label, on the rain's grid, two rows above the first line.
+    const targets = [];
+    const head = this.headLine;
+    const hc = Math.max(1, Math.round(blockLeft / s)), hr = Math.max(1, Math.round(top / s) - 3);
+    head.el.style.left = hc * s + 'px';
+    head.el.style.top = hr * s + 'px';
+    head.el.style.width = head.text.length * s + 'px';
+    head.el.style.height = s + 'px';
+    head.el.style.fontSize = s + 'px';
+    head.el.style.lineHeight = s + 'px';
+    head.letters.forEach(function (t, i) {
+      t.col = hc + i; t.row = hr; t.left = hc; t.right = hc + head.text.length - 1;
+      t.span.style.left = i * s + 'px';
+      t.span.style.width = s + 'px';
+      targets.push(t);
+    });
+
+    // Where the big letters are solid, for the rain to land on.
+    words.forEach(function (l) {
+      const w = l.word, cells = [];
+      const c0 = Math.floor((w.x) / s), c1 = Math.ceil((w.x + w.textW) / s);
+      const r0 = Math.floor((w.y) / s), r1 = Math.ceil((w.y + w.textH) / s);
+      for (let c = c0; c <= c1; c++) {
+        for (let r = r0; r <= r1; r++) {
+          if (w.coverage(c * s, r * s, s) > 0.4) cells.push({ col: c, row: r, locked: true, word: w });
+        }
+      }
+      let left = Infinity, right = -Infinity;
+      cells.forEach(function (t) { left = Math.min(left, t.col); right = Math.max(right, t.col); });
+      cells.forEach(function (t) { t.left = left; t.right = right; targets.push(t); });
+      l.cells = cells;
     });
     m.setTargets(targets);
     this.targets = targets;
@@ -129,8 +196,10 @@
     this.load();
     const self = this;
     const name = this.fromHash();
+    const now = performance.now();
+    this.words.forEach(function (l, i) { l.word.form(now + 150 + i * 160); });
     if (this.reduced) {
-      this.targets.forEach(function (t) { t.locked = true; self.show(t, true); });
+      this.targets.forEach(function (t) { if (t.span) { t.locked = true; self.show(t, true); } });
       this.matrix.setTargets(this.targets);
     } else {
       this.call(this.targets);
@@ -143,8 +212,11 @@
   // Send rain heads down every column that still has letters waiting.
   Menu.prototype.call = function (targets) {
     const top = new Map();
+    // Streams for the label's letters, and a sprinkling over the big words
+    // so rain is seen pouring onto them as they fill.
     targets.forEach(function (t) {
-      if (!t.locked && (!top.has(t.col) || t.row < top.get(t.col))) top.set(t.col, t.row);
+      const want = !t.locked || (t.word && Math.random() < 0.35);
+      if (want && (!top.has(t.col) || t.row < top.get(t.col))) top.set(t.col, t.row);
     });
     const m = this.matrix;
     top.forEach(function (row, col) { m.summon(col, row); });
@@ -152,7 +224,7 @@
 
   Menu.prototype.lockAll = function (still) {
     const self = this;
-    this.targets.forEach(function (t) { if (!t.locked) { t.locked = true; self.show(t, still); } });
+    this.targets.forEach(function (t) { if (!t.locked && t.span) { t.locked = true; self.show(t, still); } });
     if (!this.openName) this.matrix.setTargets(this.targets);
   };
 
@@ -247,14 +319,15 @@
     this.page.classList.add('entering');
     this.lines.forEach(function (l) { if (l !== chosen && l !== head) self.drop(l); });
     this.fly(head.letters, S.crumbLetters, 60);
-    this.fly(chosen.letters, S.nameLetters, 110);
+    this.flyWord(chosen, S.nameLetters, 90);
     this.part(lane, true, 480);
     setTimeout(function () {
       // The flying letters hand over to the real heading.
-      head.letters.concat(chosen.letters).forEach(function (t) { t.span.classList.add('flown'); });
+      head.letters.forEach(function (t) { t.span.classList.add('flown'); });
+      chosen.word.view.classList.add('flown');
       S.reveal();
       self.finishOpen();
-    }, 640);
+    }, 660);
   };
 
   Menu.prototype.finishOpen = function () {
@@ -277,6 +350,18 @@
     });
   };
 
+  // The chosen word shrinks as it glides up into the heading.
+  Menu.prototype.flyWord = function (line, to, delay) {
+    const v = line.word.view, w = line.word;
+    const a = { left: w.x, top: w.y };
+    const first = to[0].getBoundingClientRect(), last = to[to.length - 1].getBoundingClientRect();
+    const k = (last.right - first.left) / w.textW;
+    line.flight = v.animate([
+      { transform: 'translate(0, 0) scale(1)' },
+      { transform: 'translate(' + (first.left - a.left).toFixed(1) + 'px,' + (first.top - a.top).toFixed(1) + 'px) scale(' + k.toFixed(3) + ')' }
+    ], { duration: 560, delay: delay, easing: 'cubic-bezier(0.65, 0, 0.25, 1)', fill: 'forwards' });
+  };
+
   // The rain parts from the middle out (or closes back over).
   Menu.prototype.part = function (lane, opening, dur) {
     const m = this.matrix, mid = (lane.x0 + lane.x1) / 2, half = (lane.x1 - lane.x0) / 2;
@@ -295,8 +380,16 @@
     })(start);
   };
 
-  // The chosen word's letters lose their hold and fall, each a moment apart.
+  // Words that weren't chosen lose their hold and fall away.
   Menu.prototype.drop = function (line) {
+    if (line.word) {
+      const tilt = (Math.random() - 0.5) * 24;
+      line.flight = line.word.view.animate([
+        { transform: 'translate(0, 0) rotate(0deg)' },
+        { transform: 'translate(' + ((Math.random() - 0.5) * 60).toFixed(0) + 'px,' + Math.round(window.innerHeight * 0.9) + 'px) rotate(' + tilt.toFixed(1) + 'deg)' }
+      ], { duration: 650 + Math.random() * 200, delay: Math.random() * 90, easing: 'cubic-bezier(0.5, 0, 1, 0.6)', fill: 'forwards' });
+      return;
+    }
     const g = 2400, start = performance.now();
     const parts = line.letters.map(function (t, i) {
       return { t: t, delay: i * 30 + Math.random() * 80, vx: (Math.random() - 0.5) * 40, spin: (Math.random() - 0.5) * 6 };
@@ -339,10 +432,17 @@
       if (chosen) chosen.el.classList.remove('picked');
       self.lines.forEach(function (l) {
         l.dropping = 0;
+        if (l.flight) { l.flight.cancel(); l.flight = null; }
+        if (l.word) l.word.view.classList.remove('flown');
         l.letters.forEach(function (t) {
           if (t.flight) { t.flight.cancel(); t.flight = null; }
           t.span.classList.remove('flown');
         });
+      });
+      // Words that fell away fill with code again.
+      const now = performance.now();
+      self.words.forEach(function (l, i) {
+        if (l !== chosen && !self.reduced && !o.quick) l.word.form(now + 60 + i * 120);
       });
       // Words that fell away form out of the rain again.
       const again = [];
@@ -367,10 +467,14 @@
     if (this.reduced || o.quick) { this.matrix.setLane(null); this.parting = 0; finish(); return; }
 
     this.page.classList.add('leaving');
-    head.letters.concat(chosen ? chosen.letters : []).forEach(function (t) {
+    head.letters.forEach(function (t) {
       t.span.classList.remove('flown');
       if (t.flight) t.flight.reverse();
     });
+    if (chosen) {
+      chosen.word.view.classList.remove('flown');
+      if (chosen.flight) chosen.flight.reverse();
+    }
     this.part(S.lane(), false, 420);
     setTimeout(finish, 600);
   };

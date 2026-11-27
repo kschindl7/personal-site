@@ -26,7 +26,6 @@
   const send = $('send');
   const form = $('composer-wrap');
   const resetBtn = $('reset');
-  const sidebar = document.querySelector('.sidebar');
 
   // Falling shards are painted in the color of the page they came from.
   function rgb(v) {
@@ -35,8 +34,6 @@
   }
   const css = getComputedStyle(document.documentElement);
   const bgColor = rgb(css.getPropertyValue('--bg'));
-  const sideColor = rgb(css.getPropertyValue('--side'));
-  let sideRight = 0;
 
   const matrix = new Matrix(reduced);
   const glass = new Glass({
@@ -45,7 +42,7 @@
     matrix: matrix,
     reduced: reduced,
     seed: parseInt(params.get('seed'), 10) || 0,
-    colorAt: function (x) { return x < sideRight ? sideColor : bgColor; },
+    colorAt: function () { return bgColor; },
     onCrack: function () { jolt('small'); },
     onShatter: function () { jolt(); },
     onHalf: function () { dropBar(); },
@@ -74,7 +71,6 @@
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     glass.resize(window.innerWidth, window.innerHeight, dpr);
     menu.resize();
-    sideRight = sidebar && sidebar.offsetParent ? sidebar.getBoundingClientRect().right : 0;
     // The impact lands just above the input box, around the middle of it.
     const r = form.getBoundingClientRect();
     glass.setFocus(r.left + r.width / 2, r.top - 30, r.width);
@@ -231,7 +227,6 @@
     });
   });
 
-  $('new-chat').addEventListener('click', function () { input.focus(); });
   resetBtn.addEventListener('click', function () { location.href = location.pathname; });
 
   window.addEventListener('resize', size);
