@@ -234,6 +234,17 @@ body.shattered .app { visibility: hidden; }
 .rain-page-body h3 { margin: 30px 0 4px; font: 600 16px/1.4 var(--mono); color: #f1f6f2; }
 .rain-page-body h4 { margin: 22px 0 4px; font: 600 14px/1.4 var(--mono); color: #d8eadd; }
 .rain-page-body .dates { margin: 0 0 10px; font: 13px/1.5 var(--mono); color: #8db398; }
+/* Employers: logo and name, then each role under them. */
+.rain-page-body .employer { margin: 26px 0 8px; }
+.rain-page-body .org { display: flex; align-items: center; gap: 10px; margin: 0; font-size: 19px; }
+.rain-page-body .org .logo { flex: none; width: 24px; height: 24px; }
+.rain-page-body .place { margin: 2px 0 6px 34px; font: 13px/1.5 var(--mono); color: #8db398; }
+.rain-page-body .employer .job { margin-left: 34px; }
+.rain-page-body .skills, .rain-page-body .interests { columns: 2 220px; column-gap: 32px; max-width: none; }
+.rain-page-body .skills li, .rain-page-body .interests li { break-inside: avoid; }
+@media (max-width: 600px) {
+  .rain-page-body .place, .rain-page-body .employer .job { margin-left: 0; }
+}
 .rain-page-body strong { color: #f1f6f2; font-weight: 600; }
 .rain-page a { color: #8ff0b0; }
 .rain-page a:focus-visible { outline: 2px solid #9dffc0; outline-offset: 2px; border-radius: 2px; }

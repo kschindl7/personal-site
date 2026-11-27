@@ -69,6 +69,7 @@
     this.media = [];
     body.querySelectorAll(MEDIA).forEach(function (m) {
       if (m.closest('[data-media]') && m.closest('[data-media]') !== m) return; // inside a marked block
+      if (m.classList.contains('logo')) return;   // company logos sit inline with their names
       const wrap = document.createElement('div');
       wrap.className = 'rain-media';
       if (m.tagName === 'IFRAME') {

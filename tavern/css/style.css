@@ -350,6 +350,13 @@ html:not(.js) #content .back-to-inn { display: none; }
 #content h3 { margin: 16px 0 2px; font-size: 24px; font-weight: normal; color: var(--gold); }
 #content .dates { margin: 0; color: var(--muted); }
 #content ul { padding-left: 22px; }
+/* Employers: logo and name, then each role under them. */
+#content .org, #panel-body .org { display: flex; align-items: center; gap: 10px; }
+#content .org .logo, #panel-body .org .logo { flex: none; width: 24px; height: 24px; }
+#content .place, #panel-body .place { margin: 0 0 4px; color: var(--muted); }
+#content h4, #panel-body h4 { margin: 12px 0 2px; font-size: 20px; font-weight: normal; }
+#content .skills, #content .interests, #panel-body .skills, #panel-body .interests { columns: 2 200px; column-gap: 28px; }
+
 /* Images, video and embeds, wherever a section has any. */
 #content figure, #panel-body figure { margin: 16px 0; }
 #content figcaption, #panel-body figcaption { margin-top: 6px; color: var(--muted); }

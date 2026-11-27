@@ -54,7 +54,7 @@ Media is optional: a section can be all text. Where you want media, put it in th
 <div data-media>...</div>
 ```
 
-Paths are relative to `tavern/`, so a `media/` folder there works for both pages.
+Paths are relative to `tavern/`, so a `media/` folder there works for both pages. Company logos live in `tavern/media/logos/` (see `CREDITS.md` there); give a logo `class="logo"` to keep it inline with its company's name.
 
 ---
 

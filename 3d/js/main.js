@@ -85,6 +85,15 @@ resize();
 let contentDoc = null;
 fetch('../tavern/index.html').then(function (r) { return r.text(); }).then(function (html) {
   contentDoc = new DOMParser().parseFromString(html, 'text/html');
+  // Images and links in the content are relative to the tavern page; point
+  // them there so logos and media still load from this folder.
+  const base = new URL('../tavern/index.html', location.href);
+  contentDoc.querySelectorAll('#content [src], #content [href]').forEach(function (el) {
+    ['src', 'href'].forEach(function (a) {
+      const v = el.getAttribute(a);
+      if (v && !/^(#|[a-z]+:)/i.test(v)) el.setAttribute(a, new URL(v, base).href);
+    });
+  });
 }).catch(function () { contentDoc = null; });
 
 const world = { colliders: [], hotspots: [] };
