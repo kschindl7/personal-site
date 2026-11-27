@@ -643,6 +643,11 @@
   }
 
   Glass.prototype.resize = function (w, h, dpr) {
+    // The tallest the page has been at this width: on phones the page can be
+    // shorter while the keyboard is open, and the fracture is built for the
+    // full height so it doesn't change when the keyboard closes.
+    if (w !== this.w) this.fullH = 0;
+    this.fullH = Math.max(this.fullH || 0, h);
     this.w = w; this.h = h; this.dpr = dpr;
     // The rain, the hole and the falling pieces are soft enough to draw at up
     // to 1.5x; on high-resolution screens that is far fewer pixels to push
@@ -656,7 +661,9 @@
     // Before the first crack the layout is free to change. After it, keep
     // the same cracks unless the screen grew past them (a phone keyboard
     // closing, say, should not redraw the whole fracture).
-    if (this.geo && (!this.tCrack || w > this.geo.w + 1 || h > this.geo.h + 1)) this.geo = null;
+    // A keyboard opening or closing changes only the height, which the
+    // fracture already covers; a new width (turning the phone) rebuilds it.
+    if (this.geo && (w !== this.geo.w || h > this.geo.h + 1)) this.geo = null;
     this.dirty = true;
   };
 
@@ -667,7 +674,7 @@
 
   // Builds the fracture ahead of time so the first crack doesn't stall.
   Glass.prototype.prepare = function () {
-    if (!this.geo && this.w) { this.geo = build(this.w, this.h, this.seed, this.focus); this.dirty = true; }
+    if (!this.geo && this.w) { this.geo = build(this.w, Math.max(this.h, this.fullH || 0), this.seed, this.focus); this.dirty = true; }
     if (!this.warmed && this.w) this.warm();
   };
 

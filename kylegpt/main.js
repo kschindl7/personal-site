@@ -68,6 +68,7 @@
   let crackedAt = 0;
   let shatterTimer = 0;
 
+  let prepTimer = 0;
   function size() {
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     glass.resize(window.innerWidth, window.innerHeight, dpr);
@@ -75,6 +76,10 @@
     // The impact lands just above the input box, around the middle of it.
     const r = form.getBoundingClientRect();
     glass.setFocus(r.left + r.width / 2, r.top - 30, r.width);
+    // If that changed the fracture (the keyboard opening moves the input box),
+    // work the new one out while idle, so the first crack still doesn't stall.
+    clearTimeout(prepTimer);
+    prepTimer = setTimeout(function () { (window.requestIdleCallback || function (f) { f(); })(function () { glass.prepare(); }); }, 250);
   }
 
   function jolt(kind) {
@@ -90,8 +95,14 @@
     glass.crack(now);
   }
 
+  // On phones, put the keyboard away when the glass shatters, so it doesn't
+  // cover half the screen during the animation. (Not at the first crack:
+  // the visitor is still typing then.)
+  const touch = window.matchMedia('(pointer: coarse)').matches;
+
   function shatter(now) {
     crack(now);
+    if (touch) input.blur();
     if (shatterTimer) return;
     const wait = Math.max(0, crackedAt + CONFIG.minGapMs - now);
     shatterTimer = setTimeout(function () { glass.shatter(performance.now()); }, wait);
