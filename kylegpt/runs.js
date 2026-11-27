@@ -11,8 +11,13 @@
  * clipped against the walls with a depth buffer. The small canvas is
  * scaled up to fill the screen.
  *
+ * The cursor fires glowing bolts that travel through the maze and burst on
+ * whatever they reach: a wall, or a bug (which they damage). A minimap in
+ * the corner shows the walls, you, the remaining bugs, repair patches and
+ * the exit.
+ *
  * Controls: WASD or arrows to move, mouse or Q/E to turn (click to capture
- * the mouse), click or Space to fire, Esc to leave. On touch screens: drag
+ * the mouse), click or Space to fire, M for the map, Esc to leave. On touch screens: drag
  * on the left to move, drag on the right to turn, tap the fire button.
  */
 (function () {
@@ -66,6 +71,7 @@
       '<div class="runs-stats" aria-live="polite"><span class="runs-hp"></span><span class="runs-left"></span></div>' +
       '<div class="runs-weapon" aria-hidden="true"><span>▌</span></div>' +
       '<div class="runs-cross" aria-hidden="true"></div>' +
+      '<canvas class="runs-map" aria-hidden="true"></canvas>' +
       '<div class="runs-touch" aria-hidden="true"><div class="runs-stick"></div><button type="button" class="runs-fire" tabindex="-1">fire</button></div>' +
       '<div class="runs-screen" role="dialog" aria-modal="false"></div>';
     document.body.appendChild(el);
@@ -75,6 +81,8 @@
     this.screen = el.querySelector('.runs-screen');
     this.hpEl = el.querySelector('.runs-hp');
     this.leftEl = el.querySelector('.runs-left');
+    this.mapEl = el.querySelector('.runs-map');
+    this.mapCtx = this.mapEl.getContext('2d');
     this.weapon = el.querySelector('.runs-weapon');
     // The game draws at a low resolution straight into the visible canvas,
     // and the browser scales it up to fill the screen.
@@ -125,6 +133,9 @@
     this.planeX = 0; this.planeY = FOV;
     this.hp = 100;
     this.cool = 0; this.flash = 0; this.hit = 0;
+    this.shots = [];    // bolts in flight
+    this.sparks = [];   // where bolts burst
+    this.drawMapBase();
     this.state = 'intro';
     this.updateStats();
   };
@@ -255,6 +266,7 @@
         if (self.state === 'play') self.pause(); else self.onLeave('menu');
         return;
       }
+      if (e.code === 'KeyM') { self.el.classList.toggle('no-map'); return; }
       if (self.state !== 'play') return;
       keys[e.code] = true;
       if (e.code === 'Space') { e.preventDefault(); self.fire(); }
@@ -334,30 +346,45 @@
 
   Runs.prototype.fire = function () {
     if (this.state !== 'play' || this.cool > 0) return;
-    this.cool = 0.28;
+    this.cool = 0.24;
     this.flash = 1;
     this.weapon.classList.remove('kick'); void this.weapon.offsetWidth; this.weapon.classList.add('kick');
-    // Hitscan down the middle of the view: the nearest bug in line, if no wall is nearer.
-    const W = this.small.width;
-    let best = null, bestZ = Infinity;
-    const inv = 1 / (this.planeX * this.dirY - this.dirX * this.planeY);
-    for (let i = 0; i < this.bugs.length; i++) {
-      const b = this.bugs[i];
-      if (b.dead) continue;
-      const sx = b.x - this.px, sy = b.y - this.py;
-      const tx = inv * (this.dirY * sx - this.dirX * sy), tz = inv * (-this.planeY * sx + this.planeX * sy);
-      if (tz <= 0.1) continue;
-      const screenX = (W / 2) * (1 + tx / tz);
-      const half = Math.abs(this.small.height / tz) * 0.32;
-      if (Math.abs(screenX - W / 2) > half) continue;
-      if (tz > this.zbuf[W >> 1] + 0.2) continue;
-      if (tz < bestZ) { bestZ = tz; best = b; }
-    }
-    if (best) {
-      best.hp--; best.hurt = 0.18; best.seen = true;
-      this.hit = 0.12;
-      if (best.hp <= 0) { best.dead = 0.001; this.updateStats(); }
-    }
+    // A bolt leaves the cursor, low on the screen, and rises toward the
+    // crosshair as it travels down the middle of the view.
+    this.shots.push({ x: this.px + this.dirX * 0.3, y: this.py + this.dirY * 0.3, dx: this.dirX, dy: this.dirY, z: -0.24, dist: 0 });
+  };
+
+  // Bolts fly about 13 tiles a second and burst on the first thing they meet.
+  Runs.prototype.updateShots = function (dt) {
+    const SPEED = 13, STEP = 0.06, self = this;
+    const keep = [];
+    this.shots.forEach(function (b) {
+      let left = SPEED * dt, done = false;
+      while (left > 0 && !done) {
+        const d = Math.min(STEP, left);
+        left -= d;
+        b.x += b.dx * d; b.y += b.dy * d; b.dist += d;
+        b.z = -0.24 + Math.min(1, b.dist / 1.4) * 0.15;   // from the gun to eye level
+        if (self.solid(b.x, b.y)) {
+          self.sparks.push({ x: b.x - b.dx * 0.08, y: b.y - b.dy * 0.08, z: b.z, age: 0, wall: true });
+          done = true;
+          break;
+        }
+        for (let i = 0; i < self.bugs.length; i++) {
+          const g = self.bugs[i];
+          if (g.dead || Math.hypot(g.x - b.x, g.y - b.y) > 0.34) continue;
+          g.hp--; g.hurt = 0.18; g.seen = true;
+          self.hit = 0.12;
+          if (g.hp <= 0) { g.dead = 0.001; self.updateStats(); }
+          self.sparks.push({ x: b.x, y: b.y, z: b.z, age: 0, wall: false });
+          done = true;
+          break;
+        }
+      }
+      if (!done && b.dist < 24) keep.push(b);
+    });
+    this.shots = keep;
+    this.sparks = this.sparks.filter(function (k) { k.age += dt; return k.age < 0.28; });
   };
 
   Runs.prototype.move = function (dx, dy) {
@@ -392,6 +419,7 @@
     const len = Math.hypot(f, s) || 1, sp = MOVE * dt / Math.max(1, len);
     if (f || s) this.move((this.dirX * f - this.dirY * s) * sp, (this.dirY * f + this.dirX * s) * sp);
 
+    this.updateShots(dt);
     this.cool = Math.max(0, this.cool - dt);
     this.flash = Math.max(0, this.flash - dt * 7);
     this.hit = Math.max(0, this.hit - dt);
@@ -434,6 +462,7 @@
     const W = Math.max(240, Math.min(520, Math.round(w / 2.6)));
     this.small.width = W; this.small.height = Math.round(W * h / w);
     this.zbuf = new Float32Array(W);
+    if (this.map) this.drawMapBase();
   };
 
   // Wall texture: columns of glyphs that keep falling. A second, brighter
@@ -462,6 +491,15 @@
       g.fillRect(17 + f % 2, 19, 4, 3); g.fillRect(27 - f % 2, 19, 4, 3);
       this.bugFrames.push(c);
     }
+    // A bolt: a hot white core in a green glow.
+    const bolt = this.bolt = mk(32, 32), bg = bolt.getContext('2d');
+    const gr = bg.createRadialGradient(16, 16, 0, 16, 16, 16);
+    gr.addColorStop(0, 'rgba(255, 255, 255, 1)');
+    gr.addColorStop(0.18, 'rgba(225, 255, 236, 1)');
+    gr.addColorStop(0.42, 'rgba(90, 255, 150, 0.7)');
+    gr.addColorStop(1, 'rgba(40, 220, 110, 0)');
+    bg.fillStyle = gr;
+    bg.fillRect(0, 0, 32, 32);
     const patch = this.patch = mk(32, 32), pg = patch.getContext('2d');
     pg.fillStyle = '#7dffb0'; pg.fillRect(13, 6, 6, 20); pg.fillRect(6, 13, 20, 6);
     pg.fillStyle = '#eafff1'; pg.fillRect(14, 7, 4, 18); pg.fillRect(7, 14, 18, 4);
@@ -541,6 +579,8 @@
     this.bugs.forEach(function (b) { if (!b.dead || b.dead < 0.35) list.push({ x: b.x, y: b.y, bug: b }); });
     this.items.forEach(function (it) { list.push({ x: it.x, y: it.y, item: it }); });
     if (exitOpen) list.push({ x: this.exit.x, y: this.exit.y, exit: true });
+    this.shots.forEach(function (b) { list.push({ x: b.x, y: b.y, shot: b }); });
+    this.sparks.forEach(function (k) { list.push({ x: k.x, y: k.y, spark: k }); });
     list.forEach(function (s) { s.d = (s.x - self.px) * (s.x - self.px) + (s.y - self.py) * (s.y - self.py); });
     list.sort(function (a, b) { return b.d - a.d; });
     const inv = 1 / (this.planeX * this.dirY - this.dirX * this.planeY);
@@ -550,6 +590,29 @@
       if (tz <= 0.1) return;
       const cx = (W / 2) * (1 + tx / tz);
       let size = Math.abs(H / tz);
+      if (s.shot || s.spark) {
+        // Glowing points: drawn whole if nothing nearer covers their centre.
+        const col = Math.round(cx);
+        if (col < 0 || col >= W || tz >= self.zbuf[col]) return;
+        const z = (s.shot || s.spark).z, y = half - z * size;
+        let r, a = 1;
+        if (s.shot) r = Math.max(2, size * 0.09);
+        else { const u = s.spark.age / 0.28; r = Math.max(3, size * (0.08 + u * 0.22)); a = 1 - u; }
+        g.globalAlpha = a;
+        g.globalCompositeOperation = 'lighter';
+        g.drawImage(self.bolt, cx - r, y - r, r * 2, r * 2);
+        if (s.spark) {
+          // A few flecks thrown out from the burst.
+          g.fillStyle = s.spark.wall ? '#b9ffd0' : '#ff9ab5';
+          for (let k = 0; k < 6; k++) {
+            const ang = k * 1.047 + s.spark.x * 3, d = r * 1.3;
+            g.fillRect(cx + Math.cos(ang) * d, y + Math.sin(ang) * d, Math.max(1, r * 0.15), Math.max(1, r * 0.15));
+          }
+        }
+        g.globalCompositeOperation = 'source-over';
+        g.globalAlpha = 1;
+        return;
+      }
       let img, alpha = 1, yoff = 0;
       if (s.bug) {
         const b = s.bug;
@@ -593,6 +656,59 @@
     if (this.hurtFlash > 0) { g.fillStyle = 'rgba(255, 30, 80, ' + (this.hurtFlash * 0.5).toFixed(3) + ')'; g.fillRect(0, 0, W, H); }
 
     this.el.classList.toggle('hit', this.hit > 0);
+    this.drawMap(now);
+  };
+
+  // The minimap: north up. Walls are drawn once; the rest every frame.
+  Runs.prototype.drawMapBase = function () {
+    const rows = this.map.length, cols = this.map[0].length;
+    const t = this.mapTile = window.innerWidth < 600 ? 5 : 7;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    this.mapEl.width = cols * t * dpr; this.mapEl.height = rows * t * dpr;
+    this.mapEl.style.width = cols * t + 'px'; this.mapEl.style.height = rows * t + 'px';
+    const base = this.mapBase = document.createElement('canvas');
+    base.width = this.mapEl.width; base.height = this.mapEl.height;
+    const g = base.getContext('2d');
+    g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    for (let y = 0; y < rows; y++) {
+      for (let x = 0; x < cols; x++) {
+        g.fillStyle = this.map[y][x] === '.' ? 'rgba(10, 40, 20, 0.85)' : 'rgba(40, 170, 90, 0.75)';
+        g.fillRect(x * t, y * t, t, t);
+      }
+    }
+  };
+
+  Runs.prototype.drawMap = function (now) {
+    if (!this.mapBase) return;
+    const g = this.mapCtx, t = this.mapTile, dpr = this.mapEl.width / (this.map[0].length * t);
+    g.setTransform(1, 0, 0, 1, 0, 0);
+    g.clearRect(0, 0, this.mapEl.width, this.mapEl.height);
+    g.drawImage(this.mapBase, 0, 0);
+    g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const exitOpen = !this.bugs.some(function (b) { return !b.dead; });
+    // The exit: dim and locked until the bugs are gone, then pulsing.
+    const pulse = 0.6 + 0.4 * Math.sin(now / 180);
+    g.fillStyle = exitOpen ? 'rgba(235, 255, 242, ' + pulse.toFixed(2) + ')' : 'rgba(140, 170, 150, 0.55)';
+    g.fillRect((this.exit.x - 0.5) * t, (this.exit.y - 0.5) * t, t, t);
+    if (!exitOpen) { g.strokeStyle = 'rgba(0, 0, 0, 0.8)'; g.lineWidth = 1; g.strokeRect((this.exit.x - 0.5) * t + 1.5, (this.exit.y - 0.5) * t + 1.5, t - 3, t - 3); }
+    g.fillStyle = '#7dffb0';
+    this.items.forEach(function (it) {
+      g.fillRect(it.x * t - 1, (it.y - 0.3) * t, 2, t * 0.6);
+      g.fillRect((it.x - 0.3) * t, it.y * t - 1, t * 0.6, 2);
+    });
+    g.fillStyle = '#ff3b6b';
+    this.bugs.forEach(function (b) {
+      if (b.dead) return;
+      g.beginPath(); g.arc(b.x * t, b.y * t, Math.max(1.5, t * 0.3), 0, Math.PI * 2); g.fill();
+    });
+    // You: an arrow pointing the way you face.
+    const a = Math.atan2(this.dirY, this.dirX), px = this.px * t, py = this.py * t, r = t * 0.75;
+    g.fillStyle = '#ffffff';
+    g.beginPath();
+    g.moveTo(px + Math.cos(a) * r, py + Math.sin(a) * r);
+    g.lineTo(px + Math.cos(a + 2.5) * r * 0.75, py + Math.sin(a + 2.5) * r * 0.75);
+    g.lineTo(px + Math.cos(a - 2.5) * r * 0.75, py + Math.sin(a - 2.5) * r * 0.75);
+    g.closePath(); g.fill();
   };
 
   window.Runs = Runs;

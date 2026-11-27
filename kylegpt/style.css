@@ -325,6 +325,16 @@ body.runs-open .fx, body.runs-open .app, body.runs-open .rain-page { visibility:
 }
 .runs.hit .runs-cross { border-color: #ff7aa0; transform: scale(1.6); }
 
+/* The minimap, top right; M hides or shows it. */
+.runs-map {
+  position: absolute; top: 40px; right: 18px;
+  border: 1px solid rgba(31, 209, 106, 0.45); border-radius: 4px;
+  background: rgba(0, 0, 0, 0.6); box-shadow: 0 0 12px rgba(0, 0, 0, 0.6);
+  pointer-events: none;
+}
+.runs.no-map .runs-map { display: none; }
+.runs.paused .runs-map { opacity: 0.35; }
+
 /* Terminal screens: the intro, pause, win and lose. */
 .runs-screen {
   position: absolute; inset: 0;

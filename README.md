@@ -25,9 +25,9 @@ URL options for working on the effect: `?progress=0` shows the long crack fully 
 
 ### The game behind "other?"
 
-"other?" answers the old question "can it run…?": a terminal checks whether the site can run it, then drops you into a small first-person maze whose walls are falling code. Delete the 11 bugs (corrupted red glyphs) with the blinking cursor and reach the exit, and the build passes, unlocking the actual kyle/other page. Everything in it is original. It lives at `#run`, so it can be linked to directly, and you can always skip straight to kyle/other or go back to the menu.
+"other?" answers the old question "can it run…?": a terminal checks whether the site can run it, then drops you into a small first-person maze whose walls are falling code. Delete the 11 bugs (corrupted red glyphs) by firing glowing bolts from the blinking cursor, using the minimap in the corner to find them and the exit, and reach the exit, and the build passes, unlocking the actual kyle/other page. Everything in it is original. It lives at `#run`, so it can be linked to directly, and you can always skip straight to kyle/other or go back to the menu.
 
-Controls: WASD or the arrow keys to move, the mouse or Q/E to turn (click to capture the mouse), click or Space to fire, Esc to pause or leave. On touch screens, drag on the left to move, drag on the right to turn, and tap the fire button. The level is the `MAP` at the top of `kylegpt/runs.js`: `#` wall, `.` floor, `S` start, `b` bug, `+` repair patch, `E` exit.
+Controls: WASD or the arrow keys to move, the mouse or Q/E to turn (click to capture the mouse), click or Space to fire, M to show or hide the map, Esc to pause or leave. On touch screens, drag on the left to move, drag on the right to turn, and tap the fire button. The level is the `MAP` at the top of `kylegpt/runs.js`: `#` wall, `.` floor, `S` start, `b` bug, `+` repair patch, `E` exit.
 
 ### Adding images, video and animations
 
