@@ -32,6 +32,9 @@
     this.busy = false;
     this.picked = null;
     this.content = null;
+    // "other?" leads to a small game first (runs.js); clearing it, or
+    // choosing to skip it, opens the actual kyle/other page.
+    this.runsOpen = false;
 
     const self = this;
     this.lines = Array.prototype.map.call(this.nav.querySelectorAll('.rain-head, a'), function (el) {
@@ -69,24 +72,28 @@
     this.words = this.lines.filter(function (l) { return l.word; });
     this.headLine = this.lines.find(function (l) { return l.head; });
     this.matrix.onLock = function (t) { self.show(t); };
-    // The code lettering runs on its own frame loop.
+    this.runs = new Runs({ reduced: opts.reduced, onLeave: function (act) { self.leaveRuns(act); } });
+    // The code lettering runs on its own frame loop (paused behind the game).
     (function tick(now) {
-      if (self.started) self.words.forEach(function (l) { l.word.frame(now); });
+      if (self.started && !self.runsOpen) self.words.forEach(function (l) { l.word.frame(now); });
       requestAnimationFrame(tick);
     })(performance.now());
 
     this.nav.addEventListener('click', function (e) {
       const a = e.target.closest('a[data-section]');
+      if (a && a.classList.contains('rain-egg')) { e.preventDefault(); self.openRuns(true); return; }
       if (!a || !self.content) return; // no content loaded: just follow the link
       e.preventDefault();
       self.open(a, { push: true });
     });
     this.page.querySelector('.rain-back').addEventListener('click', function () { self.back(); });
     document.addEventListener('keydown', function (e) {
-      if (e.key === 'Escape' && self.openName) self.back();
+      if (e.key === 'Escape' && self.openName && !self.runsOpen) self.back();
     });
     // The browser's back and forward buttons move between the menu and sections.
     window.addEventListener('popstate', function () {
+      if (location.hash === '#run') { if (!self.runsOpen) { if (self.openName) self.close({ quick: true }); self.openRuns(false); } return; }
+      if (self.runsOpen) self.closeRuns();
       const name = self.fromHash();
       if (name && name !== self.openName) {
         if (self.openName) self.close({ quick: true });
@@ -178,6 +185,39 @@
       setTimeout(function () { self.lockAll(); }, 3500);
     }
     if (name) this.openWhenReady(name);
+    else if (location.hash === '#run') this.openRuns(false);
+  };
+
+  Menu.prototype.openRuns = function (push) {
+    if (this.runsOpen || this.busy) return;
+    if (push) history.pushState({ kyle: 'run' }, '', '#run');
+    this.runsPushed = !!push || !!(history.state && history.state.kyle === 'run');
+    this.runsOpen = true;
+    this.nav.inert = true;
+    this.runs.open();
+  };
+
+  Menu.prototype.closeRuns = function () {
+    if (!this.runsOpen) return;
+    this.runs.close();
+    this.runsOpen = false;
+    this.nav.inert = false;
+    const egg = this.nav.querySelector('.rain-egg');
+    if (egg) egg.focus({ preventScroll: true });
+  };
+
+  Menu.prototype.leaveRuns = function (act) {
+    if (act === 'read') {
+      // Swap the game's history entry for the page's, so Back returns to the menu.
+      const a = this.link('other');
+      this.closeRuns();
+      if (!this.content || !a) { location.href = a ? a.href : 'tavern/?view=page#other'; return; }
+      history.replaceState({ kyle: 'other' }, '', '#other');
+      this.open(a, {});
+      return;
+    }
+    if (this.runsPushed) history.back();   // popstate closes it
+    else { this.closeRuns(); history.replaceState(null, '', location.pathname + location.search); }
   };
 
   // Send rain heads down every column that still has letters waiting.

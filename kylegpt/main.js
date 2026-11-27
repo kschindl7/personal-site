@@ -174,7 +174,8 @@
   }
 
   function loop(now) {
-    glass.frame(now);
+    // The glass and rain rest while the game behind "other?" has the screen.
+    if (!document.body.classList.contains('runs-open')) glass.frame(now);
     requestAnimationFrame(loop);
   }
 
@@ -235,7 +236,7 @@
 
   // ?view=menu skips straight to the menu, for working on it.
   // A link straight to a section (#work) skips the intro too.
-  const toSection = /^#[a-z]+$/.test(location.hash) && document.querySelector('.rain-menu a[data-section="' + location.hash.slice(1) + '"]');
+  const toSection = location.hash === '#run' || (/^#[a-z]+$/.test(location.hash) && document.querySelector('.rain-menu a[data-section="' + location.hash.slice(1) + '"]'));
   const q = params.get('view') === 'menu' || toSection ? 1 : parseFloat(params.get('progress'));
   if (q >= 0) {
     const now = performance.now();

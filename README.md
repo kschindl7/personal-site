@@ -17,10 +17,17 @@ There is no build step. Everything is plain HTML, CSS, and JavaScript, and all o
 - `kylegpt/matrix.js`: the green rain, including how it forms the small `kyle/` label and parts around a section.
 - `kylegpt/section.js`: a section's view: decoding text, fading blocks in, and revealing media.
 - `kylegpt/codeword.js`: a menu word drawn as glowing letters made of streaming code.
-- `kylegpt/menu.js`: the menu that forms in the rain, and the transition into and out of a section. Its links in `index.html` point at the plain page, so they still work without JavaScript, and the panel reads each section from `tavern/index.html`, so the content still lives in one place.
+- `kylegpt/menu.js`: the menu that forms in the rain, and the transition into and out of a section.
+- `kylegpt/runs.js`: the small shooter behind "other?" (see below). Its links in `index.html` point at the plain page, so they still work without JavaScript, and the panel reads each section from `tavern/index.html`, so the content still lives in one place.
 - `kylegpt/style.css`: the chat layout.
 
 URL options for working on the effect: `?progress=0` shows the long crack fully formed, `?progress=0.4` (any value up to 1) jumps that far into the shatter, `?seed=123` gives the same fracture every time, and `?view=menu` skips straight to the menu. Without a seed, every visit breaks differently: where the long crack runs and how it forks, where the impact lands, how many cracks burst out, how many later fractures follow and when, and how fast the glass comes apart. Visitors who prefer reduced motion get the cracks without the spreading, no falling shards, a still frame of the rain, and no screen jolt. The "Skip to plain résumé" link stays on screen the whole time, and old `/?view=page` links redirect to the plain page.
+
+### The game behind "other?"
+
+"other?" answers the old question "can it run…?": a terminal checks whether the site can run it, then drops you into a small first-person maze whose walls are falling code. Delete the 11 bugs (corrupted red glyphs) with the blinking cursor and reach the exit, and the build passes, unlocking the actual kyle/other page. Everything in it is original. It lives at `#run`, so it can be linked to directly, and you can always skip straight to kyle/other or go back to the menu.
+
+Controls: WASD or the arrow keys to move, the mouse or Q/E to turn (click to capture the mouse), click or Space to fire, Esc to pause or leave. On touch screens, drag on the left to move, drag on the right to turn, and tap the fire button. The level is the `MAP` at the top of `kylegpt/runs.js`: `#` wall, `.` floor, `S` start, `b` bug, `+` repair patch, `E` exit.
 
 ### Adding images, video and animations
 
