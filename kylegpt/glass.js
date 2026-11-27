@@ -806,7 +806,7 @@
     const areaPx = S.area[L] * cs * cs;
     const sprite = !this.reduced && age < 1400 && areaPx >= 25 && this.sprites.length < MAX_SPRITES;
 
-    const dil = new ImageData(bw, bh), core = new ImageData(bw, bh), rim = new ImageData(bw, bh);
+    const dil = new ImageData(bw, bh), rim = new ImageData(bw, bh);
     const tex = sprite ? new ImageData(bw, bh) : null;
     const shade = sprite ? 0.9 + g.r() * 0.2 : 1, sheenA = g.r() * TAU;
     const sc = Math.cos(sheenA) / Math.max(1, bw), ss = Math.sin(sheenA) / Math.max(1, bh);
@@ -826,8 +826,7 @@
         }
         if (!touch) continue;
         dil.data[p + 3] = 255;
-        if (inL) core.data[p + 3] = 255;
-        else if (!fallen[lab[i]]) {
+        if (!inL && !fallen[lab[i]]) {
           // Light from the upper left catches edges that face it.
           const up = (gy > 0 && lab[i - GW] === L) || (gx > 0 && lab[i - 1] === L);
           rim.data[p] = 214; rim.data[p + 1] = 232; rim.data[p + 2] = 236;
@@ -848,12 +847,19 @@
       }
     }
     const X = bx * cs * d, Y = by * cs * d, W = bw * cs * d, H = bh * cs * d;
+    const dilC = toCanvas(dil);
     this.mctx.setTransform(1, 0, 0, 1, 0, 0);
-    this.mctx.drawImage(toCanvas(dil), X, Y, W, H);
-    const cc = this.cctx;
+    this.mctx.drawImage(dilC, X, Y, W, H);
+    // Erase the crack lines a little past the piece's outline: a line is a few
+    // pixels wide, with a shadow and a faint second edge, and slivers of it
+    // would otherwise hang over the hole. The bright broken edge on the glass
+    // still standing is drawn back in just after.
+    const cc = this.cctx, k = cs * d;
     cc.setTransform(1, 0, 0, 1, 0, 0);
     cc.globalCompositeOperation = 'destination-out';
-    cc.drawImage(toCanvas(core), X, Y, W, H);
+    [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1], [2, 0], [-2, 0], [0, 2], [0, -2], [1, 1], [-1, 1], [1, -1], [-1, -1]].forEach(function (o) {
+      cc.drawImage(dilC, X + o[0] * k, Y + o[1] * k, W, H);
+    });
     cc.globalCompositeOperation = 'source-over';
     if (rimN) cc.drawImage(toCanvas(rim), X, Y, W, H);
     fallen[L] = 1;
