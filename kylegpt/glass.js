@@ -644,10 +644,15 @@
 
   Glass.prototype.resize = function (w, h, dpr) {
     this.w = w; this.h = h; this.dpr = dpr;
-    [this.crackCanvas, this.holeCanvas, this.shardCanvas, this.mask].forEach(function (c) {
-      c.width = Math.round(w * dpr); c.height = Math.round(h * dpr);
+    // The rain, the hole and the falling pieces are soft enough to draw at up
+    // to 1.5x; on high-resolution screens that is far fewer pixels to push
+    // every frame. The crack lines stay at full sharpness.
+    const fd = this.fd = Math.min(dpr, 1.5);
+    this.crackCanvas.width = Math.round(w * dpr); this.crackCanvas.height = Math.round(h * dpr);
+    [this.holeCanvas, this.shardCanvas, this.mask].forEach(function (c) {
+      c.width = Math.round(w * fd); c.height = Math.round(h * fd);
     });
-    if (this.matrix) this.matrix.resize(w, h, dpr);
+    if (this.matrix) this.matrix.resize(w, h, fd);
     // Before the first crack the layout is free to change. After it, keep
     // the same cracks unless the screen grew past them (a phone keyboard
     // closing, say, should not redraw the whole fracture).
@@ -713,11 +718,9 @@
   Glass.prototype.boost = function (ms) { if (this.tShatter) this.extra += ms; };
 
   Glass.prototype.reset = function () {
-    const W = this.crackCanvas.width, H = this.crackCanvas.height;
-    this.cctx.setTransform(1, 0, 0, 1, 0, 0); this.cctx.clearRect(0, 0, W, H);
-    this.mctx.setTransform(1, 0, 0, 1, 0, 0); this.mctx.clearRect(0, 0, W, H);
-    this.hctx.setTransform(1, 0, 0, 1, 0, 0); this.hctx.clearRect(0, 0, W, H);
-    this.sctx.setTransform(1, 0, 0, 1, 0, 0); this.sctx.clearRect(0, 0, W, H);
+    [[this.cctx, this.crackCanvas], [this.mctx, this.mask], [this.hctx, this.holeCanvas], [this.sctx, this.shardCanvas]].forEach(function (p) {
+      p[0].setTransform(1, 0, 0, 1, 0, 0); p[0].clearRect(0, 0, p[1].width, p[1].height);
+    });
     this.holeDirty = true;
     this.geo.cracks.forEach(function (c) { c.done.fill(0); c.complete = false; });
     this.fallen = new Uint8Array(this.geo.S.n + 1);
@@ -743,9 +746,14 @@
       if (this.tShatter) {
         if (!this.bruised) this.bruise();
         const g = this.geo;
+        // Several pieces can come loose in the same instant. Prepare them for
+        // up to ~4ms a frame and carry the rest to the next frame; a piece
+        // that starts a frame late starts that far into its fall.
+        const until = performance.now() + 4;
         while (this.next < g.order.length && g.fall[g.order[this.next]] <= ts) {
           const L = g.order[this.next++];
           this.drop(L, ts - g.fall[L]);
+          if (performance.now() > until) break;
         }
         if (this.next >= g.order.length) {
           this.shattered = true;
@@ -842,52 +850,69 @@
     const bx = Math.max(0, S.x0[L] - 1), by = Math.max(0, S.y0[L] - 1);
     const bw = Math.min(GW, S.x1[L] + 2) - bx, bh = Math.min(GH, S.y1[L] + 2) - by;
     const areaPx = S.area[L] * cs * cs;
-    const sprite = !this.reduced && age < 1400 && areaPx >= 25 && this.sprites.length < MAX_SPRITES;
+    // Pieces too small to notice just vanish into the hole.
+    const sprite = !this.reduced && age < 1400 && areaPx >= 60 && this.sprites.length < MAX_SPRITES;
 
     const dil = new ImageData(bw, bh), rim = new ImageData(bw, bh);
     const tex = sprite ? new ImageData(bw, bh) : null;
     const shade = sprite ? 0.9 + g.r() * 0.2 : 1, sheenA = g.r() * TAU;
     const sc = Math.cos(sheenA) / Math.max(1, bw), ss = Math.sin(sheenA) / Math.max(1, bh);
-    let rimN = 0;
+
+    // Which pixels of the box are this piece, then grow and shrink that by a
+    // pixel (two quick passes each) to find its halo and its edge.
+    const n = bw * bh;
+    const inn = new Uint8Array(n), row = new Uint8Array(n), grow = new Uint8Array(n), keep = new Uint8Array(n);
     for (let y = 0; y < bh; y++) {
+      const o = (by + y) * GW + bx, r0 = y * bw;
+      for (let x = 0; x < bw; x++) inn[r0 + x] = lab[o + x] === L ? 1 : 0;
+    }
+    for (let y = 0, k = 0; y < bh; y++) {
+      for (let x = 0; x < bw; x++, k++) {
+        const l = x > 0 ? inn[k - 1] : 1, r = x < bw - 1 ? inn[k + 1] : 1;
+        row[k] = inn[k] | (x > 0 ? inn[k - 1] : 0) | (x < bw - 1 ? inn[k + 1] : 0);
+        keep[k] = inn[k] & l & r;
+      }
+    }
+    for (let y = 0, k = 0; y < bh; y++) {
+      for (let x = 0; x < bw; x++, k++) {
+        grow[k] = row[k] | (y > 0 ? row[k - bw] : 0) | (y < bh - 1 ? row[k + bw] : 0);
+      }
+    }
+    const dil32 = new Uint32Array(dil.data.buffer), rim32 = new Uint32Array(rim.data.buffer);
+    const tex32 = tex ? new Uint32Array(tex.data.buffer) : null;
+    const base = this.colorAt(0, 0);
+    const px = function (r, gg, b, a) {
+      return ((a << 24) | (Math.min(255, Math.max(0, b | 0)) << 16) | (Math.min(255, Math.max(0, gg | 0)) << 8) | Math.min(255, Math.max(0, r | 0))) >>> 0;
+    };
+    const RIM_HI = px(214, 232, 236, 215), RIM_LO = px(214, 232, 236, 120), SOLID = 0xff000000;
+    let rimN = 0;
+    for (let y = 0, k = 0; y < bh; y++) {
       const gy = by + y;
-      for (let x = 0; x < bw; x++) {
-        const gx = bx + x, i = gy * GW + gx, p = (y * bw + x) * 4;
-        const inL = lab[i] === L;
-        let touch = inL, edge = false;
-        for (let oy = -1; oy <= 1; oy++) {
-          const yy = gy + oy; if (yy < 0 || yy >= GH) continue;
-          for (let ox = -1; ox <= 1; ox++) {
-            const xx = gx + ox; if (xx < 0 || xx >= GW || (!ox && !oy)) continue;
-            if (lab[yy * GW + xx] === L) touch = true; else if (inL) edge = true;
-          }
-        }
-        if (!touch) continue;
-        dil.data[p + 3] = 255;
+      for (let x = 0; x < bw; x++, k++) {
+        if (!grow[k]) continue;
+        dil32[k] = SOLID;
+        const inL = inn[k] === 1;
+        const i = gy * GW + bx + x;
         if (!inL && !fallen[lab[i]]) {
           // Light from the upper left catches edges that face it.
-          const up = (gy > 0 && lab[i - GW] === L) || (gx > 0 && lab[i - 1] === L);
-          rim.data[p] = 214; rim.data[p + 1] = 232; rim.data[p + 2] = 236;
-          rim.data[p + 3] = up ? 215 : 120;
+          const up = (y > 0 && inn[k - bw]) || (x > 0 && inn[k - 1]);
+          rim32[k] = up ? RIM_HI : RIM_LO;
           rimN++;
         }
-        if (tex) {
-          const base = this.colorAt(gx * cs, gy * cs);
+        if (tex32) {
           const l = shade * (0.92 + 0.16 * (x * sc + y * ss));
-          if (!inL) {
-            tex.data[p] = base[0] * l + 70; tex.data[p + 1] = base[1] * l + 88; tex.data[p + 2] = base[2] * l + 86; tex.data[p + 3] = 150;
-          } else if (edge) {
-            tex.data[p] = base[0] * l + 26; tex.data[p + 1] = base[1] * l + 34; tex.data[p + 2] = base[2] * l + 34; tex.data[p + 3] = 245;
-          } else {
-            tex.data[p] = base[0] * l + 3; tex.data[p + 1] = base[1] * l + 5; tex.data[p + 2] = base[2] * l + 6; tex.data[p + 3] = 245;
-          }
+          // An edge pixel has at least one of its eight neighbors outside the piece.
+          const edge = inL && !(keep[k] & (y > 0 ? keep[k - bw] : 1) & (y < bh - 1 ? keep[k + bw] : 1));
+          if (!inL) tex32[k] = px(base[0] * l + 70, base[1] * l + 88, base[2] * l + 86, 150);
+          else if (edge) tex32[k] = px(base[0] * l + 26, base[1] * l + 34, base[2] * l + 34, 245);
+          else tex32[k] = px(base[0] * l + 3, base[1] * l + 5, base[2] * l + 6, 245);
         }
       }
     }
     const X = bx * cs * d, Y = by * cs * d, W = bw * cs * d, H = bh * cs * d;
-    const dilC = toCanvas(dil);
+    const dilC = toCanvas(dil), f = this.fd;
     this.mctx.setTransform(1, 0, 0, 1, 0, 0);
-    this.mctx.drawImage(dilC, X, Y, W, H);
+    this.mctx.drawImage(dilC, bx * cs * f, by * cs * f, bw * cs * f, bh * cs * f);
     this.holeDirty = true;
     // Erase the crack lines a little past the piece's outline: a line is a few
     // pixels wide, with a shadow and a faint second edge, and slivers of it
@@ -971,7 +996,7 @@
   };
 
   Glass.prototype.drawShards = function (now) {
-    const ctx = this.sctx, d = this.dpr;
+    const ctx = this.sctx, d = this.fd;
     const dt = this.lastHole ? Math.min(now - this.lastHole, 100) / 1000 : 0;
     this.lastHole = now;
     if (!this.sprites.length && !this.hadSprites) return;
