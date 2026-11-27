@@ -8,12 +8,12 @@
   <meta name="theme-color" content="#212121">
   <script>
     // Old links to the plain page (/?view=page) still work.
-    if (new URLSearchParams(location.search).get('view') === 'page') location.replace('tavern/?view=page' + location.hash);
+    if (new URLSearchParams(location.search).get('view') === 'page') location.replace('resume/' + location.hash);
   </script>
   <link rel="stylesheet" href="kylegpt/style.css">
 </head>
 <body>
-  <a class="skip-pill" href="tavern/?view=page">Skip to plain résumé</a>
+  <a class="skip-pill" href="resume/">Skip to plain résumé</a>
 
   <div class="app" id="app">
     <main class="main">
@@ -54,12 +54,12 @@
   <!-- Forms out of the rain once the screen is gone (kylegpt/menu.js). -->
   <nav class="rain-menu" id="rain-menu" aria-label="Sections" hidden>
     <p class="rain-head" aria-hidden="true">kyle/</p>
-    <a href="tavern/?view=page#about" data-section="about">about</a>
-    <a href="tavern/?view=page#work" data-section="work">work</a>
-    <a href="tavern/?view=page#interests" data-section="interests">interests</a>
-    <a href="tavern/?view=page">résumé</a>
+    <a href="resume/#about" data-section="about">about</a>
+    <a href="resume/#work" data-section="work">work</a>
+    <a href="resume/#interests" data-section="interests">interests</a>
+    <a href="resume/">résumé</a>
     <!-- Small and dim in the bottom-right corner; it lights up when found. -->
-    <a href="tavern/?view=page#other" data-section="other" class="rain-egg">other?</a>
+    <a href="resume/#other" data-section="other" class="rain-egg">other?</a>
   </nav>
 
   <!-- A section, in a clear column the rain parts around (kylegpt/section.js). -->
@@ -69,12 +69,12 @@
       <button type="button" class="rain-back">Back</button>
     </header>
     <div class="rain-page-body"></div>
-    <p class="rain-page-foot"><a class="rain-plain" href="tavern/?view=page">Open this as a plain page</a></p>
+    <p class="rain-page-foot"><a class="rain-plain" href="resume/">Open this as a plain page</a></p>
   </article>
 
   <button type="button" class="reset-btn" id="reset" hidden>Put the glass back</button>
 
-  <noscript><p class="noscript">KyleGPT needs JavaScript. <a href="tavern/?view=page">Read the plain résumé</a> instead.</p></noscript>
+  <noscript><p class="noscript">KyleGPT needs JavaScript. <a href="resume/">Read the plain résumé</a> instead.</p></noscript>
 
   <script src="kylegpt/matrix.js"></script>
   <script src="kylegpt/glass.js"></script>

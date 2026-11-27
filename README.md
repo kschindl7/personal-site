@@ -7,8 +7,12 @@ There is no build step. Everything is plain HTML, CSS, and JavaScript, and all o
 | Path | What it is |
 |---|---|
 | `/` | KyleGPT (`index.html`, `kylegpt/`) |
-| `/tavern/` | The earlier pixel-art tavern, plus the plain résumé page at `/tavern/?view=page` |
-| `/3d/` | The 3D tavern prototype |
+| `/resume/` | The résumé as one plain page, in KyleGPT's look. It holds the site's content, and prints in black on white. |
+| `/tavern/`, `/3d/` | Earlier versions of the site (the pixel-art and 3D taverns). Nothing in KyleGPT links to them, and they keep their own copy of the content. |
+
+## Editing content
+
+All of KyleGPT's text lives in `resume/index.html`: each `<section data-section="...">` is one section. KyleGPT's sections read from that page, so edit it once and both update. The "other" section is hidden on the résumé page, since it's the reward for the game behind "other?". Shared images, such as the company logos, live in `media/` (see `media/logos/CREDITS.md`).
 
 ## KyleGPT files
 
@@ -18,10 +22,11 @@ There is no build step. Everything is plain HTML, CSS, and JavaScript, and all o
 - `kylegpt/section.js`: a section's view: decoding text, fading blocks in, and revealing media.
 - `kylegpt/codeword.js`: a menu word drawn as glowing letters made of streaming code.
 - `kylegpt/menu.js`: the menu that forms in the rain, and the transition into and out of a section.
-- `kylegpt/runs.js`: the small shooter behind "other?" (see below). Its links in `index.html` point at the plain page, so they still work without JavaScript, and the panel reads each section from `tavern/index.html`, so the content still lives in one place.
+- `kylegpt/runs.js`: the small shooter behind "other?" (see below).
+- `resume/`: the résumé page (`index.html`), its styles, and its faint rain (`rain.js`). The menu's links in `index.html` point at this page, so they still work without JavaScript.
 - `kylegpt/style.css`: the chat layout.
 
-URL options for working on the effect: `?progress=0` shows the long crack fully formed, `?progress=0.4` (any value up to 1) jumps that far into the shatter, `?seed=123` gives the same fracture every time, and `?view=menu` skips straight to the menu. Without a seed, every visit breaks differently: where the long crack runs and how it forks, where the impact lands, how many cracks burst out, how many later fractures follow and when, and how fast the glass comes apart. Visitors who prefer reduced motion get the cracks without the spreading, no falling shards, a still frame of the rain, and no screen jolt. The "Skip to plain résumé" link stays on screen the whole time, and old `/?view=page` links redirect to the plain page.
+URL options for working on the effect: `?progress=0` shows the long crack fully formed, `?progress=0.4` (any value up to 1) jumps that far into the shatter, `?seed=123` gives the same fracture every time, and `?view=menu` skips straight to the menu. Without a seed, every visit breaks differently: where the long crack runs and how it forks, where the impact lands, how many cracks burst out, how many later fractures follow and when, and how fast the glass comes apart. Visitors who prefer reduced motion get the cracks without the spreading, no falling shards, a still frame of the rain, and no screen jolt. The "Skip to plain résumé" link stays on screen the whole time, and old `/?view=page` links redirect to `/resume/`.
 
 ### The game behind "other?"
 
@@ -31,21 +36,21 @@ Controls: WASD or the arrow keys to move, the mouse or Q/E to turn (click to cap
 
 ### Adding images, video and animations
 
-Media is optional: a section can be all text. Where you want media, put it in that section (or a sub-section, such as a job or project) in `tavern/index.html`, and it shows on the plain page and in KyleGPT alike. Give images and videos their real `width` and `height` so the space is kept while they load.
+Media is optional: a section can be all text. Where you want media, put it in that section (or a sub-section, such as a job or project) in `resume/index.html`, and it shows on the résumé page and in KyleGPT alike. Give images and videos their real `width` and `height` so the space is kept while they load.
 
 ```html
 <!-- An image with a caption -->
 <figure>
-  <img src="media/project.jpg" width="1600" height="900" alt="What the image shows">
+  <img src="../media/project.jpg" width="1600" height="900" alt="What the image shows">
   <figcaption>A short caption.</figcaption>
 </figure>
 
 <!-- A video people can play -->
-<video src="media/demo.mp4" controls width="1280" height="720"></video>
+<video src="../media/demo.mp4" controls width="1280" height="720"></video>
 
 <!-- An animation: a looping, muted clip. It plays only while on screen,
      and not at all for visitors who prefer reduced motion. -->
-<video src="media/loop.mp4" autoplay muted loop playsinline width="1280" height="720"></video>
+<video src="../media/loop.mp4" autoplay muted loop playsinline width="1280" height="720"></video>
 
 <!-- An embed (YouTube, Vimeo, CodePen...) -->
 <iframe src="https://www.youtube-nocookie.com/embed/VIDEO_ID" width="1280" height="720" title="What the video is"></iframe>
@@ -54,7 +59,7 @@ Media is optional: a section can be all text. Where you want media, put it in th
 <div data-media>...</div>
 ```
 
-Paths are relative to `tavern/`, so a `media/` folder there works for both pages. Company logos live in `tavern/media/logos/` (see `CREDITS.md` there); give a logo `class="logo"` to keep it inline with its company's name.
+Paths are relative to `resume/`, so files in the top-level `media/` folder are `../media/...`. Company logos live in `media/logos/`; give a logo `class="logo"` to keep it inline with its company's name.
 
 ---
 
