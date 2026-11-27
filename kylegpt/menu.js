@@ -45,12 +45,13 @@
         label.className = 'code-label';
         label.textContent = text;
         el.appendChild(label);
-        const word = new CodeWord(text, self.reduced);
+        const egg = el.classList.contains('rain-egg');
+        const word = new CodeWord(text, self.reduced, egg);
         el.appendChild(word.view);
         const on = function () { word.hoverTo = 1; }, off = function () { word.hoverTo = 0; };
         el.addEventListener('pointerenter', on); el.addEventListener('pointerleave', off);
         el.addEventListener('focus', on); el.addEventListener('blur', off);
-        return { el: el, text: text, letters: [], word: word, head: false };
+        return { el: el, text: text, letters: [], word: word, head: false, egg: egg };
       }
       el.textContent = '';
       el.setAttribute('aria-label', el.getAttribute('aria-label') || text);
@@ -94,46 +95,41 @@
     });
   }
 
-  // Size the words as large as fits, wrapping into centered rows, and line
-  // them up with the rain's grid. The small kyle/ label sits above them.
+  // Stack the main words in the middle of the screen, as large as fits;
+  // tuck "other" small into the bottom-right corner; and set the kyle/ label
+  // on the rain's grid above the stack.
   Menu.prototype.layout = function () {
     const m = this.matrix, s = m.size, vw = m.w, vh = m.h;
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     const words = this.words;
-    const base = words.map(function (l) { return CodeWord.measure(l.text, 100); });
-    const margin = Math.max(20, vw * 0.07), avail = vw - margin * 2;
-    let size = Math.min(150, vh * 0.17), rows;
-    for (; size > 26; size -= 2) {
-      const gap = size * 0.5;
-      rows = [];
-      let cur = [], w = 0;
-      words.forEach(function (l, i) {
-        const wi = base[i] * size / 100;
-        if (cur.length && w + gap + wi > avail) { rows.push({ items: cur, w: w }); cur = []; w = 0; }
-        w += (cur.length ? gap : 0) + wi;
-        cur.push({ l: l, w: wi });
-      });
-      rows.push({ items: cur, w: w });
-      const fits = rows.every(function (r) { return r.w <= avail; });
-      if (fits && rows.length * size * 1.45 <= vh * 0.62) break;
-    }
-    size = Math.round(size);
-    const lineH = Math.ceil(size * 1.45 / s) * s;
-    const gap = size * 0.5;
-    const top = Math.round((vh - rows.length * lineH) / 2 / s) * s + s;
-    let blockLeft = Infinity;
-    rows.forEach(function (row, k) {
-      let x = Math.round((vw - row.w) / 2 / s) * s;
-      blockLeft = Math.min(blockLeft, x);
-      row.items.forEach(function (it) {
-        const l = it.l;
-        l.box = { x: x, y: top + k * lineH, w: Math.ceil(it.w), h: size };
-        l.word.build(size, x, top + k * lineH, dpr);
-        x = Math.round((x + it.w + gap) / s) * s;
-      });
+    const main = words.filter(function (l) { return !l.egg; });
+    const egg = words.find(function (l) { return l.egg; });
+
+    // The main words: stacked and centered, as large as fits.
+    const widest = Math.max.apply(null, main.map(function (l) { return CodeWord.measure(l.text, 100) / 100; }));
+    const margin = Math.max(20, vw * 0.07);
+    let size = Math.min(150, (vw - margin * 2) / widest, vh * 0.68 / (main.length * 1.32));
+    size = Math.max(26, Math.floor(size));
+    const lineH = Math.ceil(size * 1.32 / s) * s;
+    const top = Math.round((vh - (main.length - 1) * lineH - size * 0.75) / 2 / s) * s;
+    main.forEach(function (l, k) {
+      const w = CodeWord.measure(l.text, size);
+      const x = Math.round((vw - w) / 2);
+      l.box = { x: x, y: top + k * lineH, w: Math.ceil(w), h: size };
+      l.word.build(size, x, top + k * lineH, dpr);
     });
 
-    // The links cover the words, with room to spare for tapping.
+    // "other": small, tucked into the bottom-right corner.
+    if (egg) {
+      const es = Math.round(Math.max(18, Math.min(30, size * 0.26)));
+      const ew = CodeWord.measure(egg.text, es), gap = vw < 600 ? 18 : 30;
+      const ex = Math.round(vw - gap - ew);
+      egg.word.build(es, ex, 0, dpr);
+      const ey = Math.round(vh - gap - egg.word.textH);
+      egg.word.build(es, ex, ey, dpr);
+      egg.box = { x: ex, y: ey, w: Math.ceil(ew), h: es };
+    }
+        // The links cover the words, with room to spare for tapping.
     words.forEach(function (l) {
       const st = l.el.style;
       st.left = l.box.x + 'px'; st.top = l.box.y + 'px';
@@ -142,10 +138,10 @@
       st.lineHeight = '';
     });
 
-    // The label, on the rain's grid, two rows above the first line.
+    // The label, on the rain's grid, centered a little above the stack.
     const targets = [];
     const head = this.headLine;
-    const hc = Math.max(1, Math.round(blockLeft / s)), hr = Math.max(1, Math.round(top / s) - 3);
+    const hc = Math.max(1, Math.round((vw / s - head.text.length) / 2)), hr = Math.max(1, Math.round(top / s) - 3);
     head.el.style.left = hc * s + 'px';
     head.el.style.top = hr * s + 'px';
     head.el.style.width = head.text.length * s + 'px';

@@ -22,9 +22,11 @@
   const STEP_MS = 50;
   const FONT = function (px) { return '800 ' + px + 'px ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif'; };
 
-  function CodeWord(text, reduced) {
+  // quiet: drawn dim, with little glow and slow code, until pointed at.
+  function CodeWord(text, reduced, quiet) {
     this.text = text;
     this.reduced = reduced;
+    this.quiet = !!quiet;
     this.view = document.createElement('canvas');
     this.view.className = 'code-word';
     this.view.setAttribute('aria-hidden', 'true');
@@ -219,6 +221,9 @@
     // A slow shimmer in overall brightness.
     const shimmer = moving ? 0.93 + 0.05 * Math.sin(now / 370) + 0.03 * Math.sin(now / 113 + 1.7) : 1;
     const lift = 0.85 + 0.15 * this.hover;
+    // A quiet word sits at a fraction of its brightness until found.
+    const presence = this.quiet ? 0.32 + 0.68 * this.hover : 1;
+    const pace = this.quiet ? 0.35 + 0.65 * this.hover : 1;
 
     cc.globalCompositeOperation = 'source-over';
     cc.globalAlpha = 1;
@@ -233,7 +238,7 @@
     this.cols.forEach(function (col) {
       col.strands.forEach(function (s, k) {
         if (moving) {
-          s.y += s.v * dt;
+          s.y += s.v * dt * pace;
           if (s.y - s.len > col.bottom) col.strands[k] = s = self.strand(col.top - Math.random() * 40 * self.dpr);
         }
         const y0 = Math.max(col.top, s.y - s.len), y1 = Math.min(col.bottom + 1, s.y);
@@ -299,11 +304,12 @@
 
     const v = this.ctx;
     v.clearRect(0, 0, this.view.width, this.view.height);
-    v.globalAlpha = (0.8 + 0.2 * this.hover) * fillAll * shimmer;
+    v.globalAlpha = (0.8 + 0.2 * this.hover) * fillAll * shimmer * (this.quiet ? presence * presence : 1);
     v.drawImage(this.glow, 0, 0);
     if (this.hover > 0.02) { v.globalAlpha = 0.6 * this.hover * fillAll; v.drawImage(this.glow, 0, 0); }
-    v.globalAlpha = 1;
+    v.globalAlpha = presence;
     v.drawImage(this.comp, 0, 0);
+    v.globalAlpha = 1;
   };
 
   window.CodeWord = CodeWord;

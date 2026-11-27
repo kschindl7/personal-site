@@ -140,6 +140,7 @@
   // streams along its edges run heavier, as if pushed aside. Pass null to
   // let the rain back in.
   Matrix.prototype.setLane = function (x0, x1) {
+    this.changed = true;
     if (x0 == null) { this.lane = null; return; }
     const first = !this.lane;
     this.lane = { x0: x0, x1: x1 };
@@ -159,14 +160,18 @@
     this.ctx.fillRect(this.lane.x0, 0, this.lane.x1 - this.lane.x0, this.h);
   };
 
+  // Returns whether the rain moved, so callers can skip redrawing it.
   Matrix.prototype.update = function (now) {
-    if (this.reduced) return; // Reduced motion: a still frame of the rain.
+    const changed = this.changed;
+    this.changed = false;
+    if (this.reduced) return changed; // Reduced motion: a still frame of the rain.
     if (!this.last) this.last = now;
     this.acc += Math.min(now - this.last, 200);
     this.last = now;
     let n = 0;
     while (this.acc >= STEP_MS && n < 3) { this.step(); this.acc -= STEP_MS; n++; }
     if (n === 3) this.acc = 0;
+    return n > 0 || changed;
   };
 
   window.Matrix = Matrix;

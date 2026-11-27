@@ -39,6 +39,7 @@
   const glass = new Glass({
     crack: $('glass-crack'),
     hole: $('glass-hole'),
+    shards: $('glass-shards'),
     matrix: matrix,
     reduced: reduced,
     seed: parseInt(params.get('seed'), 10) || 0,

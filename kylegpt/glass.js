@@ -620,8 +620,10 @@
   function Glass(opts) {
     this.crackCanvas = opts.crack;
     this.holeCanvas = opts.hole;
+    this.shardCanvas = opts.shards;   // falling pieces, on their own layer
     this.cctx = this.crackCanvas.getContext('2d');
     this.hctx = this.holeCanvas.getContext('2d');
+    this.sctx = this.shardCanvas.getContext('2d');
     this.mask = document.createElement('canvas');
     this.mctx = this.mask.getContext('2d');
     this.matrix = opts.matrix;
@@ -642,7 +644,7 @@
 
   Glass.prototype.resize = function (w, h, dpr) {
     this.w = w; this.h = h; this.dpr = dpr;
-    [this.crackCanvas, this.holeCanvas, this.mask].forEach(function (c) {
+    [this.crackCanvas, this.holeCanvas, this.shardCanvas, this.mask].forEach(function (c) {
       c.width = Math.round(w * dpr); c.height = Math.round(h * dpr);
     });
     if (this.matrix) this.matrix.resize(w, h, dpr);
@@ -661,6 +663,36 @@
   // Builds the fracture ahead of time so the first crack doesn't stall.
   Glass.prototype.prepare = function () {
     if (!this.geo && this.w) { this.geo = build(this.w, this.h, this.seed, this.focus); this.dirty = true; }
+    if (!this.warmed && this.w) this.warm();
+  };
+
+  // The first time a browser draws a particular way onto a canvas it can
+  // stall while it sets things up. Do each kind of drawing the break needs
+  // once, invisibly, ahead of time, so the first real break runs smoothly.
+  Glass.prototype.warm = function () {
+    this.warmed = true;
+    const tiny = toCanvas(new ImageData(4, 4));
+    [this.hctx, this.sctx, this.cctx, this.mctx].forEach(function (c) {
+      c.setTransform(1.1, 0.2, -0.2, 0.9, 3, 3);
+      c.globalAlpha = 0.5;
+      c.drawImage(tiny, 0, 0, 4, 4);
+      c.globalCompositeOperation = 'lighter'; c.drawImage(tiny, 0, 0);
+      c.globalCompositeOperation = 'source-in'; c.drawImage(tiny, 0, 0);
+      c.globalCompositeOperation = 'destination-out'; c.drawImage(tiny, 0, 0);
+      c.globalCompositeOperation = 'source-over';
+      c.globalAlpha = 1;
+      c.beginPath(); c.moveTo(0, 0); c.lineTo(2, 2); c.lineWidth = 1.5; c.lineCap = 'round'; c.stroke();
+      c.setTransform(1, 0, 0, 1, 0, 0);
+      c.clearRect(0, 0, 16, 16);
+    });
+    if (this.matrix && this.matrix.canvas.width) {
+      // The rain through the hole: the biggest draw of the break.
+      this.hctx.drawImage(this.mask, 0, 0);
+      this.hctx.globalCompositeOperation = 'source-in';
+      this.hctx.drawImage(this.matrix.canvas, 0, 0);
+      this.hctx.globalCompositeOperation = 'source-over';
+      this.hctx.clearRect(0, 0, this.holeCanvas.width, this.holeCanvas.height);
+    }
   };
 
   Glass.prototype.crack = function (now) {
@@ -685,6 +717,8 @@
     this.cctx.setTransform(1, 0, 0, 1, 0, 0); this.cctx.clearRect(0, 0, W, H);
     this.mctx.setTransform(1, 0, 0, 1, 0, 0); this.mctx.clearRect(0, 0, W, H);
     this.hctx.setTransform(1, 0, 0, 1, 0, 0); this.hctx.clearRect(0, 0, W, H);
+    this.sctx.setTransform(1, 0, 0, 1, 0, 0); this.sctx.clearRect(0, 0, W, H);
+    this.holeDirty = true;
     this.geo.cracks.forEach(function (c) { c.done.fill(0); c.complete = false; });
     this.fallen = new Uint8Array(this.geo.S.n + 1);
     this.next = 0;
@@ -722,8 +756,12 @@
     }
 
     if (this.anyFallen || this.shattered) {
-      if (this.matrix) this.matrix.update(now);
-      this.drawHole(now);
+      // The rain only changes 20 times a second, and the hole only when a
+      // piece falls, so the rain-through-the-hole is redrawn only then. The
+      // falling pieces move every frame, on their own layer.
+      const stepped = this.matrix ? this.matrix.update(now) : false;
+      if (stepped || this.holeDirty) this.drawHole();
+      this.drawShards(now);
     }
   };
 
@@ -850,6 +888,7 @@
     const dilC = toCanvas(dil);
     this.mctx.setTransform(1, 0, 0, 1, 0, 0);
     this.mctx.drawImage(dilC, X, Y, W, H);
+    this.holeDirty = true;
     // Erase the crack lines a little past the piece's outline: a line is a few
     // pixels wide, with a shadow and a faint second edge, and slivers of it
     // would otherwise hang over the hole. The bright broken edge on the glass
@@ -891,6 +930,7 @@
   };
 
   Glass.prototype.fillAll = function () {
+    this.holeDirty = true;
     this.mctx.setTransform(1, 0, 0, 1, 0, 0);
     this.mctx.fillStyle = '#000';
     this.mctx.fillRect(0, 0, this.mask.width, this.mask.height);
@@ -917,11 +957,10 @@
     }
   };
 
-  Glass.prototype.drawHole = function (now) {
-    const ctx = this.hctx, d = this.dpr;
-    const dt = this.lastHole ? Math.min(now - this.lastHole, 100) / 1000 : 0;
-    this.lastHole = now;
-
+  // The rain, seen only through the hole.
+  Glass.prototype.drawHole = function () {
+    const ctx = this.hctx;
+    this.holeDirty = false;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.globalAlpha = 1;
     ctx.clearRect(0, 0, this.holeCanvas.width, this.holeCanvas.height);
@@ -929,6 +968,17 @@
     ctx.globalCompositeOperation = 'source-in';
     if (this.matrix) ctx.drawImage(this.matrix.canvas, 0, 0);
     ctx.globalCompositeOperation = 'source-over';
+  };
+
+  Glass.prototype.drawShards = function (now) {
+    const ctx = this.sctx, d = this.dpr;
+    const dt = this.lastHole ? Math.min(now - this.lastHole, 100) / 1000 : 0;
+    this.lastHole = now;
+    if (!this.sprites.length && !this.hadSprites) return;
+    this.hadSprites = this.sprites.length > 0;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.globalAlpha = 1;
+    ctx.clearRect(0, 0, this.shardCanvas.width, this.shardCanvas.height);
 
     // Shards fall away from the viewer: they drop, turn over in depth, shrink,
     // and flash when a face catches the light.
