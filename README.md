@@ -1,6 +1,6 @@
 # KyleGPT
 
-Kyle's personal site. It opens on a chat page that looks like an AI assistant, titled KyleGPT. After a visitor types 5 characters, one long crack runs across the glass from near the bottom-left corner to near the top-right. At 10 characters the glass is hit just above the input box: radial cracks burst out, fork and stop where they meet other cracks, concentric cracks join them at staggered points, and later fractures start from the existing cracks. Shards of every shape and size fall away, showing green Matrix-style rain underneath until it fills the screen. Once half the glass is going, the input bar gives way too: one end is heavier, so it swings down around the other end, then slips free and falls. When the screen is gone, a menu forms in the rain, laid out in a row (wrapping on phones): each letter appears where a falling stream lands on it, spelling out `kyle/` and the sections. From then on the rain treats the words as solid: it splashes on the letters, pools along their tops, runs off the ends and pours down beside them, leaving the space under each word dry. Choosing a section makes the other words fall away while the chosen word and `kyle/` fly up to become its heading. The rain parts to leave a clear column, headings and dates decode out of scrambled characters, and the rest of the section fades in. Any images or video dissolve out of a patch of rain as they scroll into view. Back reverses it. Each section has its own address (`#work`), so the browser's back button and direct links work.
+Kyle's personal site. It opens on a chat page that looks like an AI assistant, titled KyleGPT. After a visitor types 5 characters, one long crack runs across the glass from near the bottom-left corner to near the top-right. At 10 characters the glass is hit just above the input box: radial cracks burst out, fork and stop where they meet other cracks, concentric cracks join them at staggered points, and later fractures start from the existing cracks. Shards of every shape and size fall away, showing green Matrix-style rain underneath until it fills the screen. Once half the glass is going, the input bar gives way too: one end is heavier, so it swings down around the other end, then slips free and falls. When the screen is gone, a menu forms in the rain. The section names are large glowing letters made of streaming code that stand in front of the rain: bright vertical strands run down inside each letter, their top and right edges burn almost white, a green bloom surrounds them and lights the floor beneath, and strands drip a little past their bottoms. Each word appears by filling with falling code. About, work, interests and résumé are stacked in the middle of the screen; "other" is small and dim in the bottom-right corner, lighting up only when pointed at, like a hidden extra. A small `kyle/` label above the stack condenses out of the rain. Choosing a section makes the other words fall away while the chosen word and `kyle/` fly up to become its heading. The rain parts to leave a clear column, headings and dates decode out of scrambled characters, and the rest of the section fades in. Any images or video dissolve out of a patch of rain as they scroll into view. Back reverses it. Each section has its own address (`#work`), so the browser's back button and direct links work.
 
 There is no build step. Everything is plain HTML, CSS, and JavaScript, and all of the effects are drawn in code.
 
@@ -14,12 +14,20 @@ There is no build step. Everything is plain HTML, CSS, and JavaScript, and all o
 
 - `kylegpt/main.js`: the chat page, the 5- and 10-character triggers, and the timing knobs in `CONFIG` at the top.
 - `kylegpt/glass.js`: builds the fracture (the long crack, the impact, the cascade), works out the shards from the regions the cracks enclose, and draws the cracks, the hole and the falling shards.
-- `kylegpt/matrix.js`: the green rain, including how it forms the menu's letters and then splashes on them, pools on top and spills off the ends.
+- `kylegpt/matrix.js`: the green rain, including how it forms the small `kyle/` label and parts around a section.
 - `kylegpt/section.js`: a section's view: decoding text, fading blocks in, and revealing media.
-- `kylegpt/menu.js`: the menu that forms in the rain, and the transition into and out of a section. Its links in `index.html` point at the plain page, so they still work without JavaScript, and the panel reads each section from `tavern/index.html`, so the content still lives in one place.
+- `kylegpt/codeword.js`: a menu word drawn as glowing letters made of streaming code.
+- `kylegpt/menu.js`: the menu that forms in the rain, and the transition into and out of a section.
+- `kylegpt/runs.js`: the small shooter behind "other?" (see below). Its links in `index.html` point at the plain page, so they still work without JavaScript, and the panel reads each section from `tavern/index.html`, so the content still lives in one place.
 - `kylegpt/style.css`: the chat layout.
 
 URL options for working on the effect: `?progress=0` shows the long crack fully formed, `?progress=0.4` (any value up to 1) jumps that far into the shatter, `?seed=123` gives the same fracture every time, and `?view=menu` skips straight to the menu. Without a seed, every visit breaks differently: where the long crack runs and how it forks, where the impact lands, how many cracks burst out, how many later fractures follow and when, and how fast the glass comes apart. Visitors who prefer reduced motion get the cracks without the spreading, no falling shards, a still frame of the rain, and no screen jolt. The "Skip to plain résumé" link stays on screen the whole time, and old `/?view=page` links redirect to the plain page.
+
+### The game behind "other?"
+
+"other?" answers the old question "can it run…?": a terminal checks whether the site can run it, then drops you into a small first-person maze whose walls are falling code. Delete the 11 bugs (corrupted red glyphs) by firing glowing bolts from the blinking cursor, using the minimap in the corner to find them and the exit, and reach the exit, and the build passes, unlocking the actual kyle/other page. Everything in it is original. It lives at `#run`, so it can be linked to directly, and you can always skip straight to kyle/other or go back to the menu.
+
+Controls: WASD or the arrow keys to move, the mouse or Q/E to turn (click to capture the mouse), click or Space to fire, M to show or hide the map, Esc to pause or leave. On touch screens, drag on the left to move, drag on the right to turn, and tap the fire button. The level is the `MAP` at the top of `kylegpt/runs.js`: `#` wall, `.` floor, `S` start, `b` bug, `+` repair patch, `E` exit.
 
 ### Adding images, video and animations
 
@@ -46,7 +54,7 @@ Media is optional: a section can be all text. Where you want media, put it in th
 <div data-media>...</div>
 ```
 
-Paths are relative to `tavern/`, so a `media/` folder there works for both pages.
+Paths are relative to `tavern/`, so a `media/` folder there works for both pages. Company logos live in `tavern/media/logos/` (see `CREDITS.md` there); give a logo `class="logo"` to keep it inline with its company's name.
 
 ---
 

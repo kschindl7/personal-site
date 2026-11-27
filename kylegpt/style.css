@@ -1,6 +1,5 @@
 :root {
   --bg: #212121;
-  --side: #171717;
   --surface: #303030;
   --surface-hi: #3a3a3a;
   --text: #ececec;
@@ -30,50 +29,12 @@ a { color: inherit; }
 }
 
 /* Layers, bottom to top: app UI, Matrix seen through the hole, composer, crack lines, skip link. */
+/* No will-change here: it would make .app a stacking context, and the input
+   bar (inside it) could no longer sit above the hole as it falls. */
 .app { position: relative; display: flex; height: 100vh; height: 100dvh; }
 .fx { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; }
-#glass-hole { z-index: 2; }
+#glass-hole, #glass-shards { z-index: 2; }
 #glass-crack { z-index: 4; }
-
-/* Sidebar */
-.sidebar {
-  display: none;
-  flex: 0 0 260px;
-  flex-direction: column;
-  gap: 4px;
-  padding: 10px 8px;
-  background: var(--side);
-}
-@media (min-width: 860px) { .sidebar { display: flex; } }
-
-.side-head { display: flex; align-items: center; gap: 10px; padding: 8px 10px 14px; }
-.brand-mark { display: inline-flex; color: var(--text); }
-.brand-name { font-weight: 600; font-size: 17px; }
-
-.side-btn, .side-group a {
-  display: flex; align-items: center; gap: 10px;
-  padding: 8px 10px;
-  border: 0; border-radius: 10px;
-  background: none; color: var(--text);
-  font: inherit; font-size: 14px; text-align: left; text-decoration: none;
-  cursor: pointer;
-}
-.side-btn:hover, .side-group a:hover { background: #262626; }
-.side-btn:focus-visible, .side-group a:focus-visible { outline: 2px solid #8ab4f8; outline-offset: -2px; }
-
-.side-group { display: flex; flex-direction: column; margin-top: 18px; }
-.side-group h2 { margin: 0; padding: 4px 10px 6px; font-size: 12px; font-weight: 500; color: var(--muted); }
-
-.side-user {
-  margin-top: auto;
-  display: flex; align-items: center; gap: 10px;
-  padding: 10px; font-size: 14px;
-}
-.avatar {
-  display: inline-grid; place-items: center;
-  width: 28px; height: 28px; border-radius: 50%;
-  background: #5b6b5d; color: #fff; font-size: 13px; font-weight: 600;
-}
 
 /* Main column */
 .main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
@@ -144,7 +105,8 @@ a { color: inherit; }
 .skip-pill { top: 10px; right: 14px; }
 .skip-pill:hover, .reset-btn:hover { background: var(--surface-hi); }
 .skip-pill:focus-visible, .reset-btn:focus-visible { outline: 2px solid #8ab4f8; outline-offset: 2px; }
-.reset-btn { bottom: 16px; right: 14px; cursor: pointer; }
+/* Bottom-left, leaving the bottom-right corner to the menu's hidden extra. */
+.reset-btn { bottom: 16px; left: 14px; cursor: pointer; }
 
 .noscript { position: fixed; z-index: 6; left: 16px; right: 16px; bottom: 16px; margin: 0; text-align: center; }
 
@@ -196,12 +158,10 @@ body.shattered .app { visibility: hidden; }
 .rain-head { color: var(--rain-dim); }
 .rain-menu a { pointer-events: auto; color: var(--rain-text); text-decoration: none; transition: opacity 0.3s; }
 
-/* Each letter waits invisibly until the rain reaches it, flashes, then settles.
-   Later drops make it glint for a moment as they land. */
+/* Each label letter waits invisibly until the rain reaches it, flashes, then settles. */
 .rain-l { position: absolute; top: 0; height: 100%; opacity: 0; }
 .rain-l.on { opacity: 1; color: var(--rain-flash); text-shadow: 0 0 6px #b9ffd0, 0 0 14px rgba(31, 209, 106, 0.8); }
 .rain-l.on.set { color: inherit; text-shadow: 0 0 8px rgba(31, 209, 106, 0.4); transition: color 0.7s ease-out, text-shadow 0.7s ease-out; }
-.rain-l.on.set.hit { color: #e9fff0; text-shadow: 0 0 6px rgba(185, 255, 208, 0.8); transition: none; }
 
 /* No box: a word lights up when pointed at. The hit area is still generous. */
 .rain-menu a::before { content: ""; position: absolute; inset: -16px -10px; border-radius: 4px; }
@@ -218,6 +178,15 @@ body.shattered .app { visibility: hidden; }
 /* Letters scale from their top-left corner when they fly up into a heading. */
 .rain-l { transform-origin: 0 0; }
 .rain-l.flown { opacity: 0; }
+
+/* The menu words: large lettering made of code (kylegpt/codeword.js). The
+   link keeps its text for screen readers and search, hidden under the drawing. */
+.code-word { position: absolute; pointer-events: none; }
+.code-word.flown { opacity: 0; }
+.code-label {
+  position: absolute; width: 1px; height: 1px; overflow: hidden;
+  clip: rect(0 0 0 0); white-space: nowrap;
+}
 
 /* ---------------------------------------------------------------------------
    A section, in a clear column the rain parts around (kylegpt/section.js).
@@ -265,6 +234,17 @@ body.shattered .app { visibility: hidden; }
 .rain-page-body h3 { margin: 30px 0 4px; font: 600 16px/1.4 var(--mono); color: #f1f6f2; }
 .rain-page-body h4 { margin: 22px 0 4px; font: 600 14px/1.4 var(--mono); color: #d8eadd; }
 .rain-page-body .dates { margin: 0 0 10px; font: 13px/1.5 var(--mono); color: #8db398; }
+/* Employers: logo and name, then each role under them. */
+.rain-page-body .employer { margin: 26px 0 8px; }
+.rain-page-body .org { display: flex; align-items: center; gap: 10px; margin: 0; font-size: 19px; }
+.rain-page-body .org .logo { flex: none; width: 24px; height: 24px; }
+.rain-page-body .place { margin: 2px 0 6px 34px; font: 13px/1.5 var(--mono); color: #8db398; }
+.rain-page-body .employer .job { margin-left: 34px; }
+.rain-page-body .skills, .rain-page-body .interests { columns: 2 220px; column-gap: 32px; max-width: none; }
+.rain-page-body .skills li, .rain-page-body .interests li { break-inside: avoid; }
+@media (max-width: 600px) {
+  .rain-page-body .place, .rain-page-body .employer .job { margin-left: 0; }
+}
 .rain-page-body strong { color: #f1f6f2; font-weight: 600; }
 .rain-page a { color: #8ff0b0; }
 .rain-page a:focus-visible { outline: 2px solid #9dffc0; outline-offset: 2px; border-radius: 2px; }
@@ -304,4 +284,94 @@ body.section-open .skip-pill, body.section-open .reset-btn { display: none; }
 @media (prefers-reduced-motion: reduce) {
   .rain-l.on.set, .rain-menu a, .rain-menu.chosen a:not(.picked) { transition: none; }
   .rain-in { animation: none; }
+}
+
+/* ---------------------------------------------------------------------------
+   The game behind "other?" (kylegpt/runs.js).
+   --------------------------------------------------------------------------- */
+.runs { position: fixed; inset: 0; z-index: 9; background: #000; color: var(--rain-text); font-family: var(--mono); overflow: hidden; touch-action: none; }
+.runs-view { position: absolute; inset: 0; width: 100%; height: 100%; cursor: crosshair; }
+.runs-view:focus { outline: none; }
+/* Everything behind the game is hidden while it's open, so the browser
+   isn't compositing full-screen layers nobody can see. */
+body.runs-open .skip-pill, body.runs-open .reset-btn, body.runs-open .rain-menu,
+body.runs-open .fx, body.runs-open .app, body.runs-open .rain-page { visibility: hidden; }
+
+.runs-hud, .runs-stats {
+  position: absolute; left: 18px; right: 18px;
+  display: flex; justify-content: space-between; gap: 16px;
+  font-size: 13px; color: var(--rain-dim); pointer-events: none;
+  text-shadow: 0 0 6px #000;
+}
+.runs-hud { top: 14px; }
+.runs-path { color: var(--rain); }
+.runs-stats { bottom: 16px; font-size: 15px; color: var(--rain-text); }
+.runs.paused .runs-stats, .runs.paused .runs-weapon, .runs.paused .runs-cross { opacity: 0; }
+
+/* The weapon: a big blinking text cursor. */
+.runs-weapon { position: absolute; left: 50%; bottom: -10px; transform: translateX(-50%); pointer-events: none; }
+.runs-weapon span {
+  display: block; font-size: 120px; line-height: 1; color: #d8ffe4;
+  text-shadow: 0 0 18px rgba(80, 255, 150, 0.9), 0 0 40px rgba(40, 220, 110, 0.6);
+  animation: runs-blink 1.06s steps(1) infinite;
+  will-change: opacity, transform;   /* blinks and kicks without repainting its glow */
+}
+.runs-weapon.kick span { animation: runs-kick 0.22s ease-out, runs-blink 1.06s steps(1) infinite 0.22s; }
+@keyframes runs-blink { 50% { opacity: 0.35; } }
+@keyframes runs-kick { 0% { transform: translateY(18px) scaleY(1.15); } 100% { transform: none; } }
+.runs-cross {
+  position: absolute; left: 50%; top: 50%; width: 10px; height: 10px; margin: -5px 0 0 -5px;
+  border: 1px solid rgba(180, 255, 205, 0.7); border-radius: 50%; pointer-events: none;
+}
+.runs.hit .runs-cross { border-color: #ff7aa0; transform: scale(1.6); }
+
+/* The minimap, top right; M hides or shows it. */
+.runs-map {
+  position: absolute; top: 40px; right: 18px;
+  border: 1px solid rgba(31, 209, 106, 0.45); border-radius: 4px;
+  background: rgba(0, 0, 0, 0.6); box-shadow: 0 0 12px rgba(0, 0, 0, 0.6);
+  pointer-events: none;
+}
+.runs.no-map .runs-map { display: none; }
+.runs.paused .runs-map { opacity: 0.35; }
+
+/* Terminal screens: the intro, pause, win and lose. */
+.runs-screen {
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 22px;
+  padding: 24px; background: rgba(0, 0, 0, 0.78); text-align: left;
+}
+.runs-screen[hidden] { display: none; }
+.runs-term { margin: 0; min-width: min(420px, 100%); font-size: 18px; line-height: 1.6; color: #d8ffe4; white-space: pre-wrap; }
+.runs-caret { animation: runs-blink 1.06s steps(1) infinite; color: var(--rain); }
+.runs-actions { display: flex; flex-wrap: wrap; gap: 10px; min-width: min(420px, 100%); }
+.runs-actions[hidden] { display: none; }
+.runs-actions button {
+  min-height: 44px; padding: 10px 18px;
+  border: 1px solid rgba(31, 209, 106, 0.6); border-radius: 999px;
+  background: rgba(31, 209, 106, 0.14); color: #e9fff0;
+  font: 15px var(--mono); cursor: pointer;
+}
+.runs-actions button.quiet { background: none; border-color: rgba(31, 209, 106, 0.3); color: var(--rain-text); }
+.runs-actions button:hover { background: rgba(31, 209, 106, 0.24); }
+.runs-actions button:focus-visible { outline: 2px solid #9dffc0; outline-offset: 2px; }
+
+/* Touch controls. */
+.runs-touch { display: none; }
+.runs.touch .runs-touch { display: block; }
+.runs-stick {
+  position: absolute; width: 96px; height: 96px; margin: -48px 0 0 -48px;
+  border: 1px solid rgba(160, 255, 200, 0.35); border-radius: 50%; opacity: 0; pointer-events: none;
+}
+.runs-stick.on { opacity: 1; }
+.runs-fire {
+  position: absolute; right: 20px; bottom: 56px; width: 76px; height: 76px;
+  border: 1px solid rgba(31, 209, 106, 0.7); border-radius: 50%;
+  background: rgba(31, 209, 106, 0.18); color: #e9fff0; font: 14px var(--mono);
+}
+.runs.paused .runs-touch { display: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .runs-weapon span, .runs-caret { animation: none; }
+  .runs-weapon.kick span { animation: none; }
 }

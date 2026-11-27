@@ -26,7 +26,6 @@
   const send = $('send');
   const form = $('composer-wrap');
   const resetBtn = $('reset');
-  const sidebar = document.querySelector('.sidebar');
 
   // Falling shards are painted in the color of the page they came from.
   function rgb(v) {
@@ -35,17 +34,16 @@
   }
   const css = getComputedStyle(document.documentElement);
   const bgColor = rgb(css.getPropertyValue('--bg'));
-  const sideColor = rgb(css.getPropertyValue('--side'));
-  let sideRight = 0;
 
   const matrix = new Matrix(reduced);
   const glass = new Glass({
     crack: $('glass-crack'),
     hole: $('glass-hole'),
+    shards: $('glass-shards'),
     matrix: matrix,
     reduced: reduced,
     seed: parseInt(params.get('seed'), 10) || 0,
-    colorAt: function (x) { return x < sideRight ? sideColor : bgColor; },
+    colorAt: function () { return bgColor; },
     onCrack: function () { jolt('small'); },
     onShatter: function () { jolt(); },
     onHalf: function () { dropBar(); },
@@ -74,7 +72,6 @@
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     glass.resize(window.innerWidth, window.innerHeight, dpr);
     menu.resize();
-    sideRight = sidebar && sidebar.offsetParent ? sidebar.getBoundingClientRect().right : 0;
     // The impact lands just above the input box, around the middle of it.
     const r = form.getBoundingClientRect();
     glass.setFocus(r.left + r.width / 2, r.top - 30, r.width);
@@ -177,7 +174,8 @@
   }
 
   function loop(now) {
-    glass.frame(now);
+    // The glass and rain rest while the game behind "other?" has the screen.
+    if (!document.body.classList.contains('runs-open')) glass.frame(now);
     requestAnimationFrame(loop);
   }
 
@@ -231,7 +229,6 @@
     });
   });
 
-  $('new-chat').addEventListener('click', function () { input.focus(); });
   resetBtn.addEventListener('click', function () { location.href = location.pathname; });
 
   window.addEventListener('resize', size);
@@ -239,7 +236,7 @@
 
   // ?view=menu skips straight to the menu, for working on it.
   // A link straight to a section (#work) skips the intro too.
-  const toSection = /^#[a-z]+$/.test(location.hash) && document.querySelector('.rain-menu a[data-section="' + location.hash.slice(1) + '"]');
+  const toSection = location.hash === '#run' || (/^#[a-z]+$/.test(location.hash) && document.querySelector('.rain-menu a[data-section="' + location.hash.slice(1) + '"]'));
   const q = params.get('view') === 'menu' || toSection ? 1 : parseFloat(params.get('progress'));
   if (q >= 0) {
     const now = performance.now();
@@ -248,7 +245,12 @@
     if (q > 0) { shatterTimer = -1; glass.shatter(now - Math.min(q, 1) * Glass.TOTAL_MS); }
   } else {
     // Work out the fracture while the visitor reads, so the first crack is instant.
-    (window.requestIdleCallback || function (f) { return setTimeout(f, 300); })(function () { glass.prepare(); });
+    (window.requestIdleCallback || function (f) { return setTimeout(f, 300); })(function () {
+      glass.prepare();
+      // A practice jolt that doesn't move: the browser does its first-time
+      // setup for moving the page now, rather than at the first real crack.
+      if (!reduced && app.animate) app.animate([{ transform: 'translate(0, 0)' }, { transform: 'translate(0, 0)' }], { duration: 30 });
+    });
   }
 
   requestAnimationFrame(loop);
